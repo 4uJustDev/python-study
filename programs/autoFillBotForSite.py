@@ -66,44 +66,45 @@ async def process_page():
         login_button.click()
 
         # Начинаем заполнять
-        # Находим слово
-        word_element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "form table tbody tr td:first-child")
+        for i in range(115):
+            # Находим слово
+            word_element = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "form table tbody tr td:first-child")
+                )
             )
-        )
-        word = word_element.text.strip()
-        print(f"Найдено слово: {word}")
+            word = word_element.text.strip()
+            print(f"Найдено слово: {word}")
 
-        # Получаем ассоциации
-        associations = await get_associations(word, 3)
-        print(f"Ассоциации: {associations}")
+            associations = await get_associations(word, 3)
 
-        if not associations:
-            print("Не удалось получить ассоциации")
-            return
+            if not associations:
+                print("Не удалось получить ассоциации")
+                return
 
-        association_field = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, '//input[@class="input"]'))
-        )
-        association_field.send_keys(associations[0])
+            association_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, '//input[@class="input"]'))
+            )
 
-        time.sleep(10)
+            randomWord = random.choice(associations)
+            association_field.send_keys(randomWord)
 
-        vote_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '//button[@type="submit"]'))
-        )
-        vote_button.click()
+            vote_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, '//button[@type="submit"]'))
+            )
+            vote_button.click()
+            print(f"{i}) Для {word} выбрано слово: {randomWord}")
 
     except Exception as e:
         print(f"Ошибка при работе с веб-страницей: {str(e)}")
     finally:
         print("good")
-        # driver.quit()
 
 
 async def main():
     await process_page()
+    while True:
+        time.sleep(1)
 
 
 if __name__ == "__main__":
