@@ -25,7 +25,9 @@ async def get_associations(word, count):
 
     try:
         response = ollama.generate(
-            model="deepseek-r1:14b", prompt=prompt, options={"temperature": 0.7}
+            model="deepseek-r1:14b",
+            prompt=prompt,
+            options={"temperature": 0.7},
         )
         # Очищаем ответ и преобразуем в массив
         clean_response = response["response"].strip()
@@ -77,7 +79,7 @@ async def process_page():
             word = word_element.text.strip()
             print(f"Найдено слово: {word}")
 
-            associations = await get_associations(word, 3)
+            associations = await get_associations(word, 10)
 
             end_time = time.time()  # Засекаем время окончания генерации
             generation_time = end_time - start_time  # Вычисляем время генерации
@@ -91,7 +93,11 @@ async def process_page():
             )
 
             randomWord = random.choice(associations)
-            association_field.send_keys(randomWord)
+
+            while word.lower() == randomWord.lower():
+                randomWord = random.choice(associations)
+
+            association_field.send_keys(randomWord.lower())
 
             vote_button = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH, '//button[@type="submit"]'))
