@@ -67,6 +67,7 @@ async def process_page():
 
         # Начинаем заполнять
         for i in range(115):
+            start_time = time.time()
             # Находим слово
             word_element = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located(
@@ -77,6 +78,9 @@ async def process_page():
             print(f"Найдено слово: {word}")
 
             associations = await get_associations(word, 3)
+
+            end_time = time.time()  # Засекаем время окончания генерации
+            generation_time = end_time - start_time  # Вычисляем время генерации
 
             if not associations:
                 print("Не удалось получить ассоциации")
@@ -93,7 +97,9 @@ async def process_page():
                 EC.element_to_be_clickable((By.XPATH, '//button[@type="submit"]'))
             )
             vote_button.click()
-            print(f"{i}) Для {word} выбрано слово: {randomWord}")
+            print(
+                f"#{i+1} Для {word} выбрано слово: {randomWord} ({round(generation_time, 1)})"
+            )
 
     except Exception as e:
         print(f"Ошибка при работе с веб-страницей: {str(e)}")
