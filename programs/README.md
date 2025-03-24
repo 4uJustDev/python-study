@@ -7,3 +7,7 @@ autoFillBotForSite.py - Программа для заполнения одно�
 3) Кнопка
 
 Модель - deepseek-r1:14b
+
+.env file:
+LOGIN_DICTIONARY=123
+PASSWORD_DICTIONARY=123
