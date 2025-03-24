@@ -77,9 +77,8 @@ async def process_page():
                 )
             )
             word = word_element.text.strip()
-            print(f"Найдено слово: {word}")
 
-            associations = await get_associations(word, 10)
+            associations = await get_associations(word, 8)
 
             end_time = time.time()  # Засекаем время окончания генерации
             generation_time = end_time - start_time  # Вычисляем время генерации
@@ -104,7 +103,8 @@ async def process_page():
             )
             vote_button.click()
             print(
-                f"#{i+1} Для {word} выбрано слово: {randomWord} ({round(generation_time, 1)})"
+                f"#{i+1} Слова : {associations}\n"
+                f"#{i+1} Для {word} выбрано слово: {randomWord} ({round(generation_time, 1)})\n----\n"
             )
 
     except Exception as e:
