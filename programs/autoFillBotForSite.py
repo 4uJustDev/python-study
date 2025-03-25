@@ -81,14 +81,13 @@ async def process_page():
 
                 associations = await get_associations(word, 5)
 
+                await asyncio.sleep(random.randint(5, 7))
                 end_time = time.time()  # Засекаем время окончания генерации
                 generation_time = end_time - start_time  # Вычисляем время генерации
 
                 if not associations:
                     print("Не удалось получить ассоциации")
                     return
-
-                time.sleep(random.randint(5, 7))
 
                 association_field = WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located(
@@ -123,7 +122,7 @@ async def process_page():
 async def main():
     await process_page()
     while True:
-        time.sleep(1)
+        await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
