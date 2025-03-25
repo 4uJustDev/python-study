@@ -66,7 +66,7 @@ async def process_page():
         login_button.click()
 
         # Начинаем заполнять
-        for i in range(115):
+        for i in range(116):
             try:
                 start_time = time.time()
                 # Находим слово
