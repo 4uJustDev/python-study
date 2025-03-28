@@ -8,6 +8,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 
+# Constants
+DELAY_RANGE = (5.2, 11.4)
+ASSOCIATIONS_COUNT = 10
+MAX_WORDS_TO_PROCESS = 116
+TEMPERATURE_FOR_MODEL = 0.2
+
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 load_dotenv()
 
@@ -21,7 +27,7 @@ def get_associations(word, count):
     response = ollama.generate(
         model="mistral:7b",
         prompt=prompt,
-        options={"temperature": 0.1},
+        options={"temperature": TEMPERATURE_FOR_MODEL},
     )
 
     clean_response = response["response"].strip()
@@ -81,8 +87,8 @@ def process_page():
     )
     login_button.click()
 
-    # Fill associations 116 times
-    for i in range(116):
+    # Fill associations
+    for i in range(MAX_WORDS_TO_PROCESS):
         # Generate
         start_time = time.time()
         word_element = WebDriverWait(driver, 10).until(
@@ -92,13 +98,13 @@ def process_page():
         )
         word = word_element.text.strip()
         print(f"#{i+1} Слово: {word}\n")
-        associations = get_associations(word, 5)
+        associations = get_associations(word, ASSOCIATIONS_COUNT)
         end_time = time.time()
 
         generation_time = end_time - start_time
 
         # Calculate random delay between
-        target_delay = random.uniform(5.2, 11.4)
+        target_delay = random.uniform(*DELAY_RANGE)
         if generation_time < target_delay:
             remaining_delay = target_delay - generation_time
             time.sleep(remaining_delay)
