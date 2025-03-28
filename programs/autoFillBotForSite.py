@@ -97,10 +97,12 @@ def process_page():
 
         generation_time = end_time - start_time
 
-        if generation_time < 5:
-            time.sleep(5.2 - generation_time)
-
-        generation_time += 5.2 - generation_time
+        # Calculate random delay between 5.2 and 8.3 seconds
+        target_delay = random.uniform(5.2, 11.4)
+        if generation_time < target_delay:
+            remaining_delay = target_delay - generation_time
+            time.sleep(remaining_delay)
+            generation_time = target_delay
 
         if not associations:
             print("Не удалось получить ассоциации")
