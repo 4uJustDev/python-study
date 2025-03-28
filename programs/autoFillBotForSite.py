@@ -41,8 +41,35 @@ async def process_page():
     options = webdriver.ChromeOptions()
     options.add_argument("--auto-open-devtools-for-tabs")
 
+    # Удаляем флаг автоматизации и настраиваем user-agent
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+    )
+
+    # Экспериментальные опции для скрытия автоматизации
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
     # Запускаем браузер
     driver = webdriver.Chrome(options=options)
+
+    # Модифицируем navigator.webdriver и другие свойства
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {
+            "source": """
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3]
+            });
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['ru-RU', 'ru']
+            });
+        """
+        },
+    )
 
     try:
         # Открываем страницу и логинимся
@@ -81,9 +108,11 @@ async def process_page():
 
                 associations = await get_associations(word, 5)
 
-                await asyncio.sleep(random.randint(5, 7))
                 end_time = time.time()  # Засекаем время окончания генерации
                 generation_time = end_time - start_time  # Вычисляем время генерации
+
+                if generation_time < 5:
+                    await asyncio.sleep(5.2 - generation_time)
 
                 if not associations:
                     print("Не удалось получить ассоциации")
