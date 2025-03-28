@@ -97,7 +97,7 @@ def process_page():
 
         generation_time = end_time - start_time
 
-        # Calculate random delay between 5.2 and 8.3 seconds
+        # Calculate random delay between
         target_delay = random.uniform(5.2, 11.4)
         if generation_time < target_delay:
             remaining_delay = target_delay - generation_time
