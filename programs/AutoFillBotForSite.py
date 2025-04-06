@@ -139,13 +139,12 @@ def process_page():
             f"#{i+1} Для {word} выбрано слово: {randomWord} ({round(generation_time, 1)})\n----\n"
         )
 
-    # This used for stay browser open
-    while True:
-        time.sleep(1)
-
 
 def main():
     process_page()
+    # This used for stay browser open
+    while True:
+        time.sleep(1)
 
 
 if __name__ == "__main__":
