@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 import tkinter as tk
-from tkinter import filedialog, Listbox, Scrollbar, Frame, Label
+from tkinter import filedialog, Listbox, Scrollbar, Frame, Label, Text, END
 
 
 class ImageViewer:
     def __init__(self, root):
         self.root = root
-        self.root.title("Просмотр черно-белых изображений с гистограммой")
+        self.root.title("Анализатор черно-белых изображений")
 
         # Установим начальный путь к папке с изображениями
         self.folder_path = "programs/labs/photoCorrection/photos/"
@@ -21,7 +21,7 @@ class ImageViewer:
 
         # Нижний фрейм для текста
         self.bottom_frame = Frame(root)
-        self.bottom_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.bottom_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # Левая панель (список изображений)
         self.left_frame = Frame(self.main_frame, width=200, bg="lightgray")
@@ -56,7 +56,7 @@ class ImageViewer:
 
         self.scrollbar.config(command=self.image_list.yview)
 
-        # Элементы для изображения (сделаем побольше)
+        # Элементы для изображения
         self.image_label = Label(self.image_frame, bg="white")
         self.image_label.pack(expand=True, fill=tk.BOTH, padx=10, pady=10)
 
@@ -72,11 +72,14 @@ class ImageViewer:
         )
         self.btn_change_folder.pack(pady=10, fill=tk.X)
 
-        # Текстовое поле внизу
-        self.text_label = Label(
-            self.bottom_frame, text="Hello world", font=("Arial", 12)
+        # Текстовое поле для анализа изображения
+        self.analysis_label = Label(
+            self.bottom_frame, text="Анализ изображения:", font=("Arial", 10, "bold")
         )
-        self.text_label.pack(fill=tk.X)
+        self.analysis_label.pack(anchor="w")
+
+        self.analysis_text = Text(self.bottom_frame, height=6, wrap=tk.WORD)
+        self.analysis_text.pack(fill=tk.BOTH, expand=True)
 
         # Загружаем изображения
         self.load_images()
@@ -114,12 +117,12 @@ class ImageViewer:
             img = Image.open(image_path)
             self.display_image(img)
             self.plot_histogram(img)
+            self.analyze_image(img)
         except Exception as e:
             print(f"Ошибка при загрузке изображения: {e}")
 
     def display_image(self, img):
         """Отображаем изображение с масштабированием"""
-        # Масштабируем изображение, сохраняя пропорции
         frame_width = self.image_frame.winfo_width() - 20
         frame_height = self.image_frame.winfo_height() - 20
 
@@ -143,21 +146,53 @@ class ImageViewer:
         img_array = np.array(img)
         self.ax.clear()
 
-        # Строим гистограмму с увеличенным отступом снизу
         self.ax.hist(
             img_array.ravel(), bins=256, range=(0, 256), color="black", alpha=0.7
         )
         self.ax.set_title("Гистограмма яркости")
         self.ax.set_xlabel("Уровень яркости")
-        self.ax.set_ylabel(
-            "Количество пикселей", labelpad=15
-        )  # Добавляем отступ для подписи
+        self.ax.set_ylabel("Количество пикселей", labelpad=15)
         self.ax.set_xlim(0, 255)
         self.ax.grid(True, linestyle="--", alpha=0.5)
 
-        # Увеличиваем отступы вокруг графика
         self.fig.tight_layout(pad=2)
         self.canvas.draw()
+
+    def analyze_image(self, img):
+        """Анализируем изображение и выводим характеристику"""
+        img_array = np.array(img)
+
+        # Основные параметры изображения
+        width, height = img.size
+        mode = img.mode
+        depth = img_array.itemsize * 8  # Глубина цвета в битах
+
+        # Анализ гистограммы
+        hist = np.histogram(img_array, bins=256, range=(0, 256))[0]
+        dynamic_range = np.max(img_array) - np.min(img_array)
+        unique_values = len(np.unique(img_array))
+
+        # Формируем текст анализа
+        analysis = f"Размер изображения: {width}x{height} пикселей\n"
+        analysis += f"Глубина цвета: {depth} бит\n"
+        analysis += f"Динамический диапазон: {dynamic_range} (из 255)\n"
+        analysis += f"Уникальных значений яркости: {unique_values}\n\n"
+
+        # Анализ проблем с передачей градаций
+        if dynamic_range < 100:
+            analysis += "Проблема: Низкий динамический диапазон - изображение может выглядеть плоским, с недостаточной контрастностью.\n"
+        elif np.sum(hist[:10]) > 0.2 * width * height:
+            analysis += "Проблема: Значительная область теней перегружена (левая часть гистограммы).\n"
+        elif np.sum(hist[-10:]) > 0.2 * width * height:
+            analysis += "Проблема: Значительная область светов перегружена (правая часть гистограммы).\n"
+        elif unique_values < 100:
+            analysis += "Проблема: Ограниченное количество градаций серого - возможна постеризация.\n"
+        else:
+            analysis += "Изображение имеет хороший динамический диапазон и распределение яркостей.\n"
+
+        # Выводим анализ в текстовое поле
+        self.analysis_text.delete(1.0, END)
+        self.analysis_text.insert(END, analysis)
 
     def change_folder(self):
         """Меняем папку с изображениями"""
@@ -169,6 +204,6 @@ class ImageViewer:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.geometry("1100x700")
+    root.geometry("1100x800")
     app = ImageViewer(root)
     root.mainloop()
