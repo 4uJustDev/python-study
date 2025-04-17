@@ -159,38 +159,87 @@ class ImageViewer:
         self.canvas.draw()
 
     def analyze_image(self, img):
-        """Анализируем изображение и выводим характеристику"""
-        img_array = np.array(img)
+        """Улучшенный анализ изображения с детальной проверкой гистограммы"""
 
-        # Основные параметры изображения
+        img_array = np.array(img)
         width, height = img.size
-        mode = img.mode
-        depth = img_array.itemsize * 8  # Глубина цвета в битах
+        depth = img_array.itemsize * 8
 
         # Анализ гистограммы
-        hist = np.histogram(img_array, bins=256, range=(0, 256))[0]
+        hist, bins = np.histogram(img_array, bins=256, range=(0, 256))
+        total_pixels = width * height
+
+        # Основные параметры
+        analysis = f"▌ Анализ изображения {width}x{height}px, {depth} бит\n"
+        analysis += f"▌ Общее количество пикселей: {total_pixels:,}\n"
+
+        # 1. Проверка на полностью чёрное/белое изображение
+        if np.all(img_array == 0):
+            self.analysis_text.delete(1.0, END)
+            self.analysis_text.insert(END, "▌ ВНИМАНИЕ: Полностью чёрное изображение!")
+            return
+        elif np.all(img_array == 255):
+            self.analysis_text.delete(1.0, END)
+            self.analysis_text.insert(END, "▌ ВНИМАНИЕ: Полностью белое изображение!")
+            return
+
+        # 2. Анализ распределения яркостей
+        dark_threshold = int(0.1 * 255)  # Порог для теней
+        light_threshold = int(0.9 * 255)  # Порог для светов
+
+        dark_pixels = np.sum(hist[:dark_threshold])
+        light_pixels = np.sum(hist[light_threshold:])
+        mid_pixels = np.sum(hist[dark_threshold:light_threshold])
+
+        # analysis += f"\n▌ Распределение тонов:\n"
+        # analysis += f"• Тени (0-{dark_threshold}): {dark_pixels/total_pixels:.1%}\n"
+        # analysis += f"• Средние тона: {mid_pixels/total_pixels:.1%}\n"
+        # analysis += (
+        #     f"• Света ({light_threshold}-255): {light_pixels/total_pixels:.1%}\n"
+        # )
+
+        # 3. Поиск проблем
+        problems = []
+
+        # Проверка на переэкспонирование (пересветы)
+        if light_pixels > 0.3 * total_pixels:
+            problems.append("Переэкспонирование: более 30% пикселей в ярких областях")
+
+        # Проверка на недоэкспонирование (недосвет)
+        if dark_pixels > 0.3 * total_pixels:
+            problems.append("Недоэкспонирование: более 30% пикселей в тёмных областях")
+
+        # Проверка на низкий контраст
         dynamic_range = np.max(img_array) - np.min(img_array)
-        unique_values = len(np.unique(img_array))
-
-        # Формируем текст анализа
-        analysis = f"Размер изображения: {width}x{height} пикселей\n"
-        analysis += f"Глубина цвета: {depth} бит\n"
-        analysis += f"Динамический диапазон: {dynamic_range} (из 255)\n"
-        analysis += f"Уникальных значений яркости: {unique_values}\n\n"
-
-        # Анализ проблем с передачей градаций
         if dynamic_range < 100:
-            analysis += "Проблема: Низкий динамический диапазон - изображение может выглядеть плоским, с недостаточной контрастностью.\n"
-        elif np.sum(hist[:10]) > 0.2 * width * height:
-            analysis += "Проблема: Значительная область теней перегружена (левая часть гистограммы).\n"
-        elif np.sum(hist[-10:]) > 0.2 * width * height:
-            analysis += "Проблема: Значительная область светов перегружена (правая часть гистограммы).\n"
-        elif unique_values < 100:
-            analysis += "Проблема: Ограниченное количество градаций серого - возможна постеризация.\n"
-        else:
-            analysis += "Изображение имеет хороший динамический диапазон и распределение яркостей.\n"
+            problems.append(f"Низкий контраст (диапазон всего {dynamic_range} из 255)")
 
-        # Выводим анализ в текстовое поле
+        # Проверка на постеризацию
+        unique_values = len(np.unique(img_array))
+        if unique_values < 100:
+            problems.append(f"Постеризация: только {unique_values} уникальных оттенков")
+
+        # 4. Формирование итогового вывода
+        # if problems:
+        #     analysis += "\n▌ ПРОБЛЕМЫ ОБНАРУЖЕНЫ:\n"
+        #     for i, problem in enumerate(problems, 1):
+        #         analysis += f"{i}. {problem}\n"
+
+        #     # Дополнительные рекомендации
+        #     analysis += "\n▌ Рекомендации:\n"
+        #     if "Переэкспонирование" in problems:
+        #         analysis += "- Уменьшите экспозицию или восстановите света\n"
+        #     if "Недоэкспонирование" in problems:
+        #         analysis += "- Увеличьте экспозицию или вытяните тени\n"
+        #     if "Низкий контраст" in problems:
+        #         analysis += "- Примените коррекцию уровней или кривых\n"
+        #     if "Постеризация" in problems:
+        #         analysis += "- Используйте дизеринг при конвертации в ЧБ\n"
+        # else:
+        #     analysis += "\n▌ Качество изображения в норме\n"
+        #     analysis += "- Хороший баланс светов и теней\n"
+        #     analysis += "- Достаточный динамический диапазон\n"
+
         self.analysis_text.delete(1.0, END)
         self.analysis_text.insert(END, analysis)
 
