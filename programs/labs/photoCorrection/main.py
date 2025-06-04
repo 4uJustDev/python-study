@@ -43,15 +43,27 @@ class ImageCorrector:
     def logarithmic_correction(image, c=1.0):
         """Коррекция через логарифмическое преобразование"""
         img_array = np.array(image).astype(float)
+
         # Нормализация значений в диапазон [0, 1]
         img_norm = img_array / 255.0
 
-        # Применение логарифмического преобразования с коэффициентом C
+        # Применение логарифмического преобразования
         # Формула: c * log(1 + x)
+        # Используем натуральный логарифм (ln)
         img_log = c * np.log(1 + img_norm)
 
-        # Нормализация результата обратно в диапазон [0, 255]
-        img_log = (255 * img_log / np.max(img_log)).astype(np.uint8)
+        # Нормализация результата
+        # Находим минимальное и максимальное значения
+        min_val = np.min(img_log)
+        max_val = np.max(img_log)
+
+        # Нормализация в диапазон [0, 1]
+        if max_val > min_val:  # Избегаем деления на ноль
+            img_log = (img_log - min_val) / (max_val - min_val)
+
+        # Преобразование обратно в диапазон [0, 255]
+        img_log = (img_log * 255).astype(np.uint8)
+
         return Image.fromarray(img_log)
 
 
@@ -390,54 +402,64 @@ class ImageViewer:
         light_pixels = np.sum(hist[light_threshold:])
         mid_pixels = np.sum(hist[dark_threshold:light_threshold])
 
-        # analysis += f"\n▌ Распределение тонов:\n"
-        # analysis += f"• Тени (0-{dark_threshold}): {dark_pixels/total_pixels:.1%}\n"
-        # analysis += f"• Средние тона: {mid_pixels/total_pixels:.1%}\n"
-        # analysis += (
-        #     f"• Света ({light_threshold}-255): {light_pixels/total_pixels:.1%}\n"
-        # )
+        analysis += f"\n▌ Распределение тонов:\n"
+        analysis += f"• Тени (0-{dark_threshold}): {dark_pixels/total_pixels:.1%}\n"
+        analysis += f"• Средние тона: {mid_pixels/total_pixels:.1%}\n"
+        analysis += (
+            f"• Света ({light_threshold}-255): {light_pixels/total_pixels:.1%}\n"
+        )
 
-        # 3. Поиск проблем
+        # 3. Поиск проблем и рекомендации
         problems = []
+        recommendations = []
 
         # Проверка на переэкспонирование (пересветы)
         if light_pixels > 0.3 * total_pixels:
             problems.append("Переэкспонирование: более 30% пикселей в ярких областях")
+            recommendations.append(
+                "• Рекомендуется: Логарифмическая коррекция (для восстановления деталей в светах)"
+            )
 
         # Проверка на недоэкспонирование (недосвет)
         if dark_pixels > 0.3 * total_pixels:
             problems.append("Недоэкспонирование: более 30% пикселей в тёмных областях")
+            recommendations.append(
+                "• Рекомендуется: Гамма-коррекция (gamma < 1.0 для осветления теней)"
+            )
 
         # Проверка на низкий контраст
         dynamic_range = np.max(img_array) - np.min(img_array)
         if dynamic_range < 100:
             problems.append(f"Низкий контраст (диапазон всего {dynamic_range} из 255)")
+            recommendations.append(
+                "• Рекомендуется: Линейное растяжение (для увеличения контраста)"
+            )
 
         # Проверка на постеризацию
         unique_values = len(np.unique(img_array))
         if unique_values < 100:
             problems.append(f"Постеризация: только {unique_values} уникальных оттенков")
+            recommendations.append(
+                "• Рекомендуется: S-образная коррекция (для сглаживания переходов)"
+            )
 
         # 4. Формирование итогового вывода
-        # if problems:
-        #     analysis += "\n▌ ПРОБЛЕМЫ ОБНАРУЖЕНЫ:\n"
-        #     for i, problem in enumerate(problems, 1):
-        #         analysis += f"{i}. {problem}\n"
+        if problems:
+            analysis += "\n▌ ПРОБЛЕМЫ ОБНАРУЖЕНЫ:\n"
+            for i, problem in enumerate(problems, 1):
+                analysis += f"{i}. {problem}\n"
 
-        #     # Дополнительные рекомендации
-        #     analysis += "\n▌ Рекомендации:\n"
-        #     if "Переэкспонирование" in problems:
-        #         analysis += "- Уменьшите экспозицию или восстановите света\n"
-        #     if "Недоэкспонирование" in problems:
-        #         analysis += "- Увеличьте экспозицию или вытяните тени\n"
-        #     if "Низкий контраст" in problems:
-        #         analysis += "- Примените коррекцию уровней или кривых\n"
-        #     if "Постеризация" in problems:
-        #         analysis += "- Используйте дизеринг при конвертации в ЧБ\n"
-        # else:
-        #     analysis += "\n▌ Качество изображения в норме\n"
-        #     analysis += "- Хороший баланс светов и теней\n"
-        #     analysis += "- Достаточный динамический диапазон\n"
+            # Добавляем рекомендации
+            analysis += "\n▌ Рекомендуемые методы коррекции:\n"
+            for rec in recommendations:
+                analysis += f"{rec}\n"
+        else:
+            analysis += "\n▌ Качество изображения в норме\n"
+            analysis += "• Хороший баланс светов и теней\n"
+            analysis += "• Достаточный динамический диапазон\n"
+            analysis += (
+                "• Рекомендуется: Без коррекции (изображение не требует обработки)"
+            )
 
         self.analysis_text.delete(1.0, END)
         self.analysis_text.insert(END, analysis)
