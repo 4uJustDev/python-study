@@ -5,7 +5,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 import tkinter as tk
 from tkinter import filedialog, Listbox, Scrollbar, Frame, Label, Text, END, ttk
-import cv2
 from skimage import exposure
 
 
@@ -44,9 +43,14 @@ class ImageCorrector:
     def logarithmic_correction(image, c=1.0):
         """Коррекция через логарифмическое преобразование"""
         img_array = np.array(image).astype(float)
-        # Добавляем 1 к каждому пикселю, чтобы избежать логарифма от 0
-        img_log = c * np.log(1 + img_array)
-        # Нормализация результата
+        # Нормализация значений в диапазон [0, 1]
+        img_norm = img_array / 255.0
+
+        # Применение логарифмического преобразования с коэффициентом C
+        # Формула: c * log(1 + x)
+        img_log = c * np.log(1 + img_norm)
+
+        # Нормализация результата обратно в диапазон [0, 255]
         img_log = (255 * img_log / np.max(img_log)).astype(np.uint8)
         return Image.fromarray(img_log)
 
@@ -80,8 +84,9 @@ class ImageViewer:
         self.right_frame.pack(side=tk.RIGHT, expand=True, fill=tk.BOTH)
 
         # Верхняя часть правой панели (изображение)
-        self.image_frame = Frame(self.right_frame, height=400, bg="white")
+        self.image_frame = Frame(self.right_frame, width=600, height=400, bg="black")
         self.image_frame.pack(fill=tk.BOTH, expand=True)
+        self.image_frame.pack_propagate(False)  # Запрещаем изменение размера фрейма
 
         # Нижняя часть правой панели (гистограмма)
         self.hist_frame = Frame(self.right_frame, height=300)
@@ -147,9 +152,10 @@ class ImageViewer:
 
         # Слайдер для гамма-коррекции
         self.gamma_frame = Frame(self.correction_frame, bg="lightgray")
-        self.gamma_frame.pack(fill=tk.X, pady=5)
         self.gamma_label = Label(self.gamma_frame, text="Гамма:", bg="lightgray")
         self.gamma_label.pack(side=tk.LEFT)
+        self.gamma_value = Label(self.gamma_frame, text="1.0", bg="lightgray")
+        self.gamma_value.pack(side=tk.RIGHT)
         self.gamma_scale = ttk.Scale(
             self.gamma_frame,
             from_=0.1,
@@ -159,16 +165,15 @@ class ImageViewer:
         )
         self.gamma_scale.set(1.0)
         self.gamma_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.gamma_value = Label(self.gamma_frame, text="1.0", bg="lightgray")
-        self.gamma_value.pack(side=tk.LEFT)
 
         # Слайдер для S-образной коррекции
         self.s_curve_frame = Frame(self.correction_frame, bg="lightgray")
-        self.s_curve_frame.pack(fill=tk.X, pady=5)
         self.s_curve_label = Label(
             self.s_curve_frame, text="Сила S-кривой:", bg="lightgray"
         )
         self.s_curve_label.pack(side=tk.LEFT)
+        self.s_curve_value = Label(self.s_curve_frame, text="0.5", bg="lightgray")
+        self.s_curve_value.pack(side=tk.RIGHT)
         self.s_curve_scale = ttk.Scale(
             self.s_curve_frame,
             from_=0.1,
@@ -178,14 +183,13 @@ class ImageViewer:
         )
         self.s_curve_scale.set(0.5)
         self.s_curve_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.s_curve_value = Label(self.s_curve_frame, text="0.5", bg="lightgray")
-        self.s_curve_value.pack(side=tk.LEFT)
 
         # Слайдер для логарифмической коррекции
         self.log_frame = Frame(self.correction_frame, bg="lightgray")
-        self.log_frame.pack(fill=tk.X, pady=5)
         self.log_label = Label(self.log_frame, text="Коэффициент C:", bg="lightgray")
         self.log_label.pack(side=tk.LEFT)
+        self.log_value = Label(self.log_frame, text="1.0", bg="lightgray")
+        self.log_value.pack(side=tk.RIGHT)
         self.log_scale = ttk.Scale(
             self.log_frame,
             from_=0.1,
@@ -195,8 +199,6 @@ class ImageViewer:
         )
         self.log_scale.set(1.0)
         self.log_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.log_value = Label(self.log_frame, text="1.0", bg="lightgray")
-        self.log_value.pack(side=tk.LEFT)
 
         # Текстовое поле для анализа изображения
         self.analysis_label = Label(
@@ -233,6 +235,11 @@ class ImageViewer:
         if not self.original_image:
             return
 
+        # Скрываем все слайдеры
+        self.gamma_frame.pack_forget()
+        self.s_curve_frame.pack_forget()
+        self.log_frame.pack_forget()
+
         method = self.correction_method.get()
 
         if method == "Без коррекции":
@@ -240,16 +247,19 @@ class ImageViewer:
         elif method == "Линейное растяжение":
             self.current_image = ImageCorrector.linear_stretch(self.original_image)
         elif method == "S-образная коррекция":
+            self.s_curve_frame.pack(fill=tk.X, pady=5)
             strength = float(self.s_curve_scale.get())
             self.current_image = ImageCorrector.s_curve_correction(
                 self.original_image, strength
             )
         elif method == "Гамма-коррекция":
+            self.gamma_frame.pack(fill=tk.X, pady=5)
             gamma = float(self.gamma_scale.get())
             self.current_image = ImageCorrector.gamma_correction(
                 self.original_image, gamma
             )
         elif method == "Логарифмическая коррекция":
+            self.log_frame.pack(fill=tk.X, pady=5)
             c = float(self.log_scale.get())
             self.current_image = ImageCorrector.logarithmic_correction(
                 self.original_image, c
@@ -296,22 +306,37 @@ class ImageViewer:
             print(f"Ошибка при загрузке изображений: {e}")
 
     def display_image(self, img):
-        """Отображаем изображение с масштабированием"""
-        frame_width = self.image_frame.winfo_width() - 20
-        frame_height = self.image_frame.winfo_height() - 20
+        """Отображаем изображение с фиксированными размерами"""
+        # Фиксированные размеры для отображения
+        display_width = 600
+        display_height = 400
 
+        # Вычисляем новые размеры с сохранением пропорций
         img_ratio = img.width / img.height
-        frame_ratio = frame_width / frame_height
+        display_ratio = display_width / display_height
 
-        if frame_ratio > img_ratio:
-            new_height = frame_height
+        if display_ratio > img_ratio:
+            new_height = display_height
             new_width = int(new_height * img_ratio)
         else:
-            new_width = frame_width
+            new_width = display_width
             new_height = int(new_width / img_ratio)
 
+        # Изменяем размер изображения
         img = img.resize((new_width, new_height), Image.LANCZOS)
-        photo = ImageTk.PhotoImage(img)
+
+        # Создаем новое изображение с черным фоном нужного размера
+        background = Image.new("L", (display_width, display_height), 0)
+
+        # Вычисляем позицию для центрирования изображения
+        x = (display_width - new_width) // 2
+        y = (display_height - new_height) // 2
+
+        # Вставляем изображение в центр фона
+        background.paste(img, (x, y))
+
+        # Конвертируем в формат для отображения
+        photo = ImageTk.PhotoImage(background)
         self.image_label.config(image=photo)
         self.image_label.image = photo
 
