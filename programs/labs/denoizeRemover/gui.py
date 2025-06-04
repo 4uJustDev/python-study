@@ -9,9 +9,26 @@ from image_processor import ImageProcessor
 
 
 class ImageDenoisingApp:
+    # Filter names in Russian
+    filter_names = {
+        "median": "Медианный",
+        "gaussian": "Гауссовский",
+        "bilateral": "Билатеральный",
+        "wiener": "Винеровский",
+    }
+
+    # Noise type translations
+    noise_types = {
+        "Gaussian": "Гауссовский",
+        "Salt and Pepper": "Соль и перец",
+        "Poisson": "Пуассоновский",
+        "Speckle": "Спекл",
+        "Unknown": "Неизвестный",
+    }
+
     def __init__(self, root):
         self.root = root
-        self.root.title("Image Denoising Application")
+        self.root.title("Приложение для удаления шума с изображений")
         self.root.geometry("1200x800")
         self.root.minsize(800, 600)
 
@@ -21,11 +38,33 @@ class ImageDenoisingApp:
         # Initialize image processor
         self.processor = ImageProcessor()
         self.current_file = None
+
+        # Updated default parameters for better results
         self.filter_params = {
-            "median": {"kernel_size": 5},
-            "gaussian": {"kernel_size": (5, 5), "sigma": 1.5},
-            "bilateral": {"d": 9, "sigma_color": 50, "sigma_space": 50},
-            "wiener": {"kernel_size": 5, "noise": 0.05},
+            "median": {"kernel_size": 3},  # Smaller kernel for less blur
+            "gaussian": {
+                "kernel_size": (3, 3),
+                "sigma": 0.8,
+            },  # Smaller kernel, lower sigma
+            "bilateral": {
+                "d": 5,
+                "sigma_color": 75,
+                "sigma_space": 75,
+            },  # Adjusted for better detail preservation
+            "wiener": {
+                "kernel_size": 3,
+                "noise": 0.01,
+            },  # Smaller kernel, lower noise estimate
+        }
+
+        # Parameter names in Russian
+        self.param_names = {
+            "kernel_size": "Размер ядра",
+            "sigma": "Сигма",
+            "d": "Диаметр",
+            "sigma_color": "Сигма цвета",
+            "sigma_space": "Сигма пространства",
+            "noise": "Шум",
         }
 
         # Store last used parameters for each filter
@@ -106,7 +145,7 @@ class ImageDenoisingApp:
 
         # Configure tree columns
         self.tree["columns"] = "fullpath"
-        self.tree.heading("#0", text="Filename")
+        self.tree.heading("#0", text="Имя файла")
         self.tree.column("#0", width=150)
         self.tree.column("fullpath", width=0, stretch=tk.NO)  # Hidden column
 
@@ -114,7 +153,7 @@ class ImageDenoisingApp:
 
         # Add directory selection button
         self.dir_button = ttk.Button(
-            self.tree_frame, text="Select Directory", command=self.select_directory
+            self.tree_frame, text="Выбрать папку", command=self.select_directory
         )
         self.dir_button.pack(fill=tk.X, padx=5, pady=5)
 
@@ -135,7 +174,9 @@ class ImageDenoisingApp:
         self.workspace.grid_rowconfigure(1, weight=1)
 
         # Top left - Original image
-        self.original_frame = ttk.LabelFrame(self.workspace, text="Original Image")
+        self.original_frame = ttk.LabelFrame(
+            self.workspace, text="Исходное изображение"
+        )
         self.original_frame.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
         self.original_frame.grid_propagate(False)
 
@@ -144,7 +185,9 @@ class ImageDenoisingApp:
         self.original_canvas.pack(fill=tk.BOTH, expand=True)
 
         # Top right - Processed image
-        self.processed_frame = ttk.LabelFrame(self.workspace, text="Processed Image")
+        self.processed_frame = ttk.LabelFrame(
+            self.workspace, text="Обработанное изображение"
+        )
         self.processed_frame.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
         self.processed_frame.grid_propagate(False)
 
@@ -153,22 +196,24 @@ class ImageDenoisingApp:
         self.processed_canvas.pack(fill=tk.BOTH, expand=True)
 
         # Bottom left - Noise distribution
-        self.noise_frame = ttk.LabelFrame(self.workspace, text="Noise Analysis")
+        self.noise_frame = ttk.LabelFrame(self.workspace, text="Анализ шума")
         self.noise_frame.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
         self.noise_frame.grid_propagate(False)
 
         # Bottom right - PSNR chart
-        self.psnr_frame = ttk.LabelFrame(self.workspace, text="Quality Metrics")
+        self.psnr_frame = ttk.LabelFrame(self.workspace, text="Метрики качества")
         self.psnr_frame.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
         self.psnr_frame.grid_propagate(False)
 
         # Info label for noise type
-        self.noise_info = ttk.Label(self.noise_frame, text="Noise type: Not analyzed")
+        self.noise_info = ttk.Label(
+            self.noise_frame, text="Тип шума: Не проанализирован"
+        )
         self.noise_info.pack(pady=5)
 
     def create_control_panel(self):
         """Create control panel with filter options"""
-        self.control_frame = ttk.LabelFrame(self.workspace, text="Filter Controls")
+        self.control_frame = ttk.LabelFrame(self.workspace, text="Управление фильтрами")
         self.control_frame.grid(
             row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew"
         )
@@ -180,7 +225,7 @@ class ImageDenoisingApp:
         for i, filter_name in enumerate(filters):
             ttk.Radiobutton(
                 self.control_frame,
-                text=filter_name.capitalize(),
+                text=self.filter_names[filter_name],
                 value=filter_name,
                 variable=self.filter_var,
                 command=self.update_parameter_controls,
@@ -192,12 +237,12 @@ class ImageDenoisingApp:
 
         # Apply button
         ttk.Button(
-            self.control_frame, text="Apply Filter", command=self.apply_filter
+            self.control_frame, text="Применить фильтр", command=self.apply_filter
         ).grid(row=0, column=len(filters), padx=5, pady=5)
 
         # Save button
         ttk.Button(
-            self.control_frame, text="Save Result", command=self.save_result
+            self.control_frame, text="Сохранить результат", command=self.save_result
         ).grid(row=0, column=len(filters) + 1, padx=5, pady=5)
 
         # Initialize parameter controls
@@ -210,7 +255,7 @@ class ImageDenoisingApp:
             widget.destroy()
 
         filter_type = self.filter_var.get()
-        params = self.last_used_params.get(filter_type, self.filter_params[filter_type])
+        params = self.last_used_params[filter_type].copy()
 
         # Prepare param_vars for this filter
         if filter_type not in self.param_vars:
@@ -218,9 +263,9 @@ class ImageDenoisingApp:
 
         row = 0
         for param, value in params.items():
-            ttk.Label(self.param_frame, text=f"{param}:").grid(
-                row=row, column=0, padx=2, sticky="e"
-            )
+            ttk.Label(
+                self.param_frame, text=f"{self.param_names.get(param, param)}:"
+            ).grid(row=row, column=0, padx=2, sticky="e")
 
             if isinstance(value, int):
                 if param not in self.param_vars[filter_type]:
@@ -243,7 +288,7 @@ class ImageDenoisingApp:
                 )
             elif isinstance(value, tuple):
                 # For kernel size (width, height)
-                ttk.Label(self.param_frame, text="width:").grid(
+                ttk.Label(self.param_frame, text="ширина:").grid(
                     row=row, column=1, padx=2
                 )
                 if param not in self.param_vars[filter_type]:
@@ -269,7 +314,7 @@ class ImageDenoisingApp:
                     ),
                 )
 
-                ttk.Label(self.param_frame, text="height:").grid(
+                ttk.Label(self.param_frame, text="высота:").grid(
                     row=row, column=3, padx=2
                 )
                 height_spin = ttk.Spinbox(
@@ -291,7 +336,7 @@ class ImageDenoisingApp:
 
                 # Sigma for Gaussian
                 if filter_type == "gaussian":
-                    ttk.Label(self.param_frame, text="sigma:").grid(
+                    ttk.Label(self.param_frame, text="сигма:").grid(
                         row=row, column=0, padx=2, sticky="e"
                     )
                     if "sigma" not in self.param_vars[filter_type]:
@@ -341,22 +386,29 @@ class ImageDenoisingApp:
             row += 1
 
     def update_param_value(self, param, value, filter_type=None):
-        """Update parameter value in the dictionary"""
+        """Update parameter value and store in last_used_params"""
         if filter_type is None:
             filter_type = self.filter_var.get()
-        try:
-            if param in ["kernel_size", "d"]:
-                value = int(value)
-            elif param in ["sigma", "sigma_color", "sigma_space", "noise"]:
-                value = float(value)
 
-            # Update both current and last used parameters
-            self.filter_params[filter_type][param] = value
-            if filter_type not in self.last_used_params:
-                self.last_used_params[filter_type] = {}
-            self.last_used_params[filter_type][param] = value
-        except ValueError:
-            pass
+        try:
+            # Convert value to appropriate type
+            if param == "kernel_size":
+                if isinstance(value, str) and "x" in value:
+                    width, height = map(int, value.split("x"))
+                    value = (width, height)
+                else:
+                    value = int(value)
+            elif param in ["sigma", "noise"]:
+                value = float(value)
+            elif param in ["sigma_color", "sigma_space"]:
+                value = int(value)
+
+            # Update the parameter in last_used_params
+            if filter_type in self.last_used_params:
+                self.last_used_params[filter_type][param] = value
+
+        except ValueError as e:
+            messagebox.showerror("Ошибка", f"Недопустимое значение параметра: {str(e)}")
 
     def update_kernel_size(self, width, height, filter_type=None, param="kernel_size"):
         """Update kernel size (special case for tuple parameter)"""
@@ -414,7 +466,7 @@ class ImageDenoisingApp:
 
         if not image_files:
             # Show message if no images found
-            self.tree.insert("", "end", text="No images found", values=("",))
+            self.tree.insert("", "end", text="Изображения не найдены", values=("",))
             messagebox.showinfo(
                 "Information",
                 "No supported image files found in the selected directory.",
@@ -456,13 +508,15 @@ class ImageDenoisingApp:
 
             # Analyze noise
             noise_info = self.processor.analyze_noise(self.current_image)
-            self.noise_info.config(text=f"Noise type: {noise_info}")
+            self.noise_info.config(text=f"Тип шума: {noise_info}")
 
             # Generate histogram
             self.display_histogram()
 
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load image: {str(e)}")
+            messagebox.showerror(
+                "Ошибка", f"Не удалось загрузить изображение: {str(e)}"
+            )
             # Clear the tree selection
             self.tree.selection_remove(self.tree.selection())
 
@@ -521,6 +575,16 @@ class ImageDenoisingApp:
         if fig is None:
             return
 
+        # Translate histogram labels
+        for ax in fig.axes:
+            ax.set_title("Распределение интенсивности")
+            ax.set_xlabel("Интенсивность")
+            ax.set_ylabel("Частота")
+            # Translate tick labels
+            ax.tick_params(axis="both", labelsize=8)
+            # Format y-axis ticks to show percentages
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.1%}"))
+
         # Embed in Tkinter
         canvas = FigureCanvasTkAgg(fig, master=self.noise_frame)
         canvas.draw()
@@ -542,13 +606,34 @@ class ImageDenoisingApp:
     def apply_filter(self):
         """Apply selected filter to the image"""
         if self.current_image is None:
-            messagebox.showwarning("Warning", "No image loaded")
+            messagebox.showwarning("Предупреждение", "Изображение не загружено")
             return
 
         filter_type = self.filter_var.get()
-        params = self.filter_params[filter_type]
+
+        # Use last_used_params instead of filter_params
+        params = self.last_used_params[filter_type].copy()
 
         try:
+            # Validate parameters before applying
+            if filter_type == "median":
+                if params["kernel_size"] % 2 == 0:
+                    params["kernel_size"] += 1  # Ensure odd kernel size
+            elif filter_type == "gaussian":
+                if isinstance(params["kernel_size"], tuple):
+                    w, h = params["kernel_size"]
+                    if w % 2 == 0:
+                        w += 1
+                    if h % 2 == 0:
+                        h += 1
+                    params["kernel_size"] = (w, h)
+            elif filter_type == "bilateral":
+                if params["d"] % 2 == 0:
+                    params["d"] += 1  # Ensure odd diameter
+            elif filter_type == "wiener":
+                if params["kernel_size"] % 2 == 0:
+                    params["kernel_size"] += 1  # Ensure odd kernel size
+
             # Apply filter
             self.processed_image = self.processor.apply_filter(
                 self.current_image, filter_type, **params
@@ -561,10 +646,13 @@ class ImageDenoisingApp:
             psnr = self.processor.calculate_psnr(
                 self.current_image, self.processed_image
             )
-            self.display_psnr(psnr)
+            if psnr is not None:
+                self.display_psnr(psnr)
+            else:
+                messagebox.showwarning("Предупреждение", "Не удалось рассчитать PSNR")
 
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to apply filter: {str(e)}")
+            messagebox.showerror("Ошибка", f"Не удалось применить фильтр: {str(e)}")
 
     def display_psnr(self, psnr):
         """Display PSNR metric and comparison"""
@@ -577,12 +665,13 @@ class ImageDenoisingApp:
         ax = fig.add_subplot(111)
 
         # Create bar chart
-        filters = ["Original", self.filter_var.get().capitalize()]
+        filters = ["Оригинал", self.filter_names[self.filter_var.get()]]
         psnr_values = [0, psnr]  # Original has 0 PSNR for comparison
 
         bars = ax.bar(filters, psnr_values)
-        ax.set_title("PSNR Comparison")
-        ax.set_ylabel("PSNR (dB)")
+        ax.set_title("Сравнение PSNR")
+        ax.set_ylabel("PSNR (дБ)")
+        ax.set_xlabel("Изображение")
 
         # Add value labels on bars
         for bar in bars:
@@ -596,12 +685,14 @@ class ImageDenoisingApp:
             )
 
         # Add text info
-        noise_info = self.processor.noise_type
-        filter_type = self.filter_var.get()
+        noise_info = self.noise_types.get(
+            self.processor.noise_type, self.processor.noise_type
+        )
+        filter_type = self.filter_names[self.filter_var.get()]
         ax.text(
             0.5,
             -0.3,
-            f"Noise: {noise_info}\nFilter: {filter_type}",
+            f"Шум: {noise_info}\nФильтр: {filter_type}",
             ha="center",
             va="center",
             transform=ax.transAxes,
@@ -619,11 +710,13 @@ class ImageDenoisingApp:
     def save_result(self):
         """Save processed image to file"""
         if self.processed_image is None:
-            messagebox.showwarning("Warning", "No processed image to save")
+            messagebox.showwarning(
+                "Предупреждение", "Нет обработанного изображения для сохранения"
+            )
             return
 
         if not self.current_file:
-            messagebox.showwarning("Warning", "No original file reference")
+            messagebox.showwarning("Предупреждение", "Нет ссылки на исходный файл")
             return
 
         # Suggest a filename based on original
@@ -652,7 +745,9 @@ class ImageDenoisingApp:
                 # Save image
                 cv2.imwrite(file_path, save_image)
                 messagebox.showinfo(
-                    "Success", f"Image saved successfully to:\n{file_path}"
+                    "Успех", f"Изображение успешно сохранено в:\n{file_path}"
                 )
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to save image: {str(e)}")
+                messagebox.showerror(
+                    "Ошибка", f"Не удалось сохранить изображение: {str(e)}"
+                )

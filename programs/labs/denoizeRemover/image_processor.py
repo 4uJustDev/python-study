@@ -8,7 +8,7 @@ class ImageProcessor:
     def __init__(self):
         self.original_image = None
         self.processed_image = None
-        self.noise_type = "Not analyzed"
+        self.noise_type = "Не проанализирован"
         self.noise_category = None
         self.psnr_value = None
         self.histogram_fig = None
@@ -18,7 +18,7 @@ class ImageProcessor:
         """Load image from file"""
         self.original_image = cv2.imread(file_path)
         if self.original_image is None:
-            raise ValueError("Failed to load image")
+            raise ValueError("Не удалось загрузить изображение")
         return self.original_image
 
     def analyze_noise(self, image):
@@ -71,107 +71,96 @@ class ImageProcessor:
 
             # Determine noise category
             if energy_ratio > 0.5 and correlation_peak > 2 * correlation_std:
-                self.noise_category = "deterministic"
+                self.noise_category = "детерминированный"
             else:
-                self.noise_category = "random"
+                self.noise_category = "случайный"
 
             # Analyze specific noise type based on statistics
-            if self.noise_category == "random":
+            if self.noise_category == "случайный":
                 if noise_std < 0.02:  # ~5/255
-                    self.noise_type = "Low random noise"
+                    self.noise_type = "Низкий случайный шум"
                 elif noise_std < 0.08:  # ~20/255
-                    self.noise_type = "Gaussian noise"
+                    self.noise_type = "Гауссовский шум"
                 else:
                     # Check for salt and pepper
                     extreme_pixels = np.sum((gray == 0) | (gray == 1))
                     if extreme_pixels / gray.size > 0.01:
-                        self.noise_type = "Salt and pepper noise"
+                        self.noise_type = "Шум типа соль и перец"
                     else:
-                        self.noise_type = "High Gaussian noise"
+                        self.noise_type = "Сильный гауссовский шум"
             else:  # deterministic noise
                 # Check for periodic patterns
                 if energy_ratio > 0.7:
-                    self.noise_type = "Periodic noise"
+                    self.noise_type = "Периодический шум"
                 # Check for structured patterns
                 elif correlation_peak > 3 * correlation_std:
-                    self.noise_type = "Structured noise"
+                    self.noise_type = "Структурированный шум"
                 else:
-                    self.noise_type = "Complex deterministic noise"
+                    self.noise_type = "Сложный детерминированный шум"
 
             return f"{self.noise_type} ({self.noise_category})"
 
         except Exception as e:
-            print(f"Error analyzing noise: {e}")
-            self.noise_type = "Analysis failed"
+            print(f"Ошибка анализа шума: {e}")
+            self.noise_type = "Ошибка анализа"
             return self.noise_type
 
     def apply_filter(self, image, filter_type, **params):
         """Apply selected filter to the image"""
         try:
             if len(image.shape) == 3:
-                # For color images, process each channel separately or convert to appropriate color space
+                # For color images, process in YCrCb color space
+                ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
+                y_channel = ycrcb[:, :, 0]
+
+                # Apply filter to Y channel
                 if filter_type == "wiener":
-                    # Convert to YCrCb color space for Wiener filter
-                    ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
-                    y_channel = ycrcb[:, :, 0].astype(np.float32)
-
                     kernel_size = params.get("kernel_size", 3)
-                    noise = params.get("noise", 0.05)
-
-                    # Apply wiener filter to Y channel
+                    noise = params.get("noise", 0.01)
                     filtered_y = signal.wiener(
-                        y_channel, (kernel_size, kernel_size), noise
+                        y_channel.astype(np.float32), (kernel_size, kernel_size), noise
                     )
                     filtered_y = np.clip(filtered_y, 0, 255).astype(np.uint8)
+                elif filter_type == "median":
+                    kernel_size = params.get("kernel_size", 3)
+                    filtered_y = cv2.medianBlur(y_channel, kernel_size)
+                elif filter_type == "gaussian":
+                    kernel_size = params.get("kernel_size", (3, 3))
+                    sigma = params.get("sigma", 0.8)
+                    filtered_y = cv2.GaussianBlur(y_channel, kernel_size, sigma)
+                elif filter_type == "bilateral":
+                    d = params.get("d", 5)
+                    sigma_color = params.get("sigma_color", 75)
+                    sigma_space = params.get("sigma_space", 75)
+                    filtered_y = cv2.bilateralFilter(
+                        y_channel, d, sigma_color, sigma_space
+                    )
 
-                    # Replace Y channel with filtered version
-                    ycrcb[:, :, 0] = filtered_y
-                    # Convert back to BGR
-                    return cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
-                else:
-                    # For other filters, process each channel separately
-                    filtered = np.zeros_like(image)
-                    for i in range(3):
-                        channel = image[:, :, i]
-                        if filter_type == "median":
-                            kernel_size = params.get("kernel_size", 3)
-                            filtered[:, :, i] = cv2.medianBlur(channel, kernel_size)
-                        elif filter_type == "gaussian":
-                            kernel_size = params.get("kernel_size", (5, 5))
-                            sigma = params.get("sigma", 1.5)
-                            filtered[:, :, i] = cv2.GaussianBlur(
-                                channel, kernel_size, sigma
-                            )
-                        elif filter_type == "bilateral":
-                            d = params.get("d", 9)
-                            sigma_color = params.get("sigma_color", 50)
-                            sigma_space = params.get("sigma_space", 50)
-                            filtered[:, :, i] = cv2.bilateralFilter(
-                                channel, d, sigma_color, sigma_space
-                            )
-                    return filtered
+                # Replace Y channel with filtered version
+                ycrcb[:, :, 0] = filtered_y
+                # Convert back to BGR
+                return cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
             else:
                 # For grayscale images
-                if filter_type == "median":
+                if filter_type == "wiener":
+                    kernel_size = params.get("kernel_size", 3)
+                    noise = params.get("noise", 0.01)
+                    filtered = signal.wiener(
+                        image.astype(np.float32), (kernel_size, kernel_size), noise
+                    )
+                    return np.clip(filtered, 0, 255).astype(np.uint8)
+                elif filter_type == "median":
                     kernel_size = params.get("kernel_size", 3)
                     return cv2.medianBlur(image, kernel_size)
                 elif filter_type == "gaussian":
-                    kernel_size = params.get("kernel_size", (5, 5))
-                    sigma = params.get("sigma", 1.5)
+                    kernel_size = params.get("kernel_size", (3, 3))
+                    sigma = params.get("sigma", 0.8)
                     return cv2.GaussianBlur(image, kernel_size, sigma)
                 elif filter_type == "bilateral":
-                    d = params.get("d", 9)
-                    sigma_color = params.get("sigma_color", 50)
-                    sigma_space = params.get("sigma_space", 50)
+                    d = params.get("d", 5)
+                    sigma_color = params.get("sigma_color", 75)
+                    sigma_space = params.get("sigma_space", 75)
                     return cv2.bilateralFilter(image, d, sigma_color, sigma_space)
-                elif filter_type == "wiener":
-                    kernel_size = params.get("kernel_size", 3)
-                    noise = params.get("noise", 0.05)
-                    image_float = image.astype(np.float32)
-                    filtered = signal.wiener(
-                        image_float, (kernel_size, kernel_size), noise
-                    )
-                    return np.clip(filtered, 0, 255).astype(np.uint8)
 
             return image
 
@@ -236,11 +225,11 @@ class ImageProcessor:
             self.histogram_fig = plt.figure(figsize=(6, 4), tight_layout=True)
             ax = self.histogram_fig.add_subplot(111)
             ax.hist(gray.ravel(), bins=256, range=[0, 256], color="gray", alpha=0.7)
-            ax.set_title("Pixel Intensity Histogram")
-            ax.set_xlabel("Pixel Value")
-            ax.set_ylabel("Frequency")
+            ax.set_title("Гистограмма интенсивности пикселей")
+            ax.set_xlabel("Значение пикселя")
+            ax.set_ylabel("Частота")
             ax.grid(True, linestyle="--", alpha=0.5)
             return self.histogram_fig
         except Exception as e:
-            print(f"Error generating histogram: {e}")
+            print(f"Ошибка генерации гистограммы: {e}")
             return None
