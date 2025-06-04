@@ -4,7 +4,51 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 import tkinter as tk
-from tkinter import filedialog, Listbox, Scrollbar, Frame, Label, Text, END
+from tkinter import filedialog, Listbox, Scrollbar, Frame, Label, Text, END, ttk
+import cv2
+from skimage import exposure
+
+
+class ImageCorrector:
+    @staticmethod
+    def linear_stretch(image):
+        """Линейное растяжение гистограммы"""
+        img_array = np.array(image)
+        p2, p98 = np.percentile(img_array, (2, 98))
+        img_stretched = exposure.rescale_intensity(img_array, in_range=(p2, p98))
+        return Image.fromarray(img_stretched)
+
+    @staticmethod
+    def s_curve_correction(image, strength=0.5):
+        """Нелинейные преобразования (S-образная коррекция)"""
+        img_array = np.array(image).astype(float)
+        # Нормализация значений в диапазон [0, 1]
+        img_norm = img_array / 255.0
+
+        # Применение S-образной кривой
+        # Используем сигмоидную функцию с настраиваемой силой эффекта
+        img_s = 1 / (1 + np.exp(-strength * (img_norm - 0.5)))
+
+        # Обратное масштабирование в диапазон [0, 255]
+        img_s = (img_s * 255).astype(np.uint8)
+        return Image.fromarray(img_s)
+
+    @staticmethod
+    def gamma_correction(image, gamma=1.0):
+        """Гамма-коррекция"""
+        img_array = np.array(image)
+        img_gamma = exposure.adjust_gamma(img_array, gamma)
+        return Image.fromarray(img_gamma)
+
+    @staticmethod
+    def logarithmic_correction(image, c=1.0):
+        """Коррекция через логарифмическое преобразование"""
+        img_array = np.array(image).astype(float)
+        # Добавляем 1 к каждому пикселю, чтобы избежать логарифма от 0
+        img_log = c * np.log(1 + img_array)
+        # Нормализация результата
+        img_log = (255 * img_log / np.max(img_log)).astype(np.uint8)
+        return Image.fromarray(img_log)
 
 
 class ImageViewer:
@@ -13,7 +57,11 @@ class ImageViewer:
         self.root.title("Анализатор черно-белых изображений")
 
         # Установим начальный путь к папке с изображениями
-        self.folder_path = "programs/labs/photoCorrection/photos/"
+        self.folder_path = "photos/"
+
+        # Текущее изображение
+        self.current_image = None
+        self.original_image = None
 
         # Создаем главные контейнеры
         self.main_frame = Frame(root)
@@ -72,6 +120,84 @@ class ImageViewer:
         )
         self.btn_change_folder.pack(pady=10, fill=tk.X)
 
+        # Фрейм для методов коррекции
+        self.correction_frame = Frame(self.left_frame, bg="lightgray")
+        self.correction_frame.pack(fill=tk.X, pady=10)
+
+        self.correction_label = Label(
+            self.correction_frame, text="Методы коррекции:", bg="lightgray"
+        )
+        self.correction_label.pack(anchor="w")
+
+        # Комбобокс для выбора метода коррекции
+        self.correction_method = ttk.Combobox(
+            self.correction_frame,
+            values=[
+                "Без коррекции",
+                "Линейное растяжение",
+                "S-образная коррекция",
+                "Гамма-коррекция",
+                "Логарифмическая коррекция",
+            ],
+            state="readonly",
+        )
+        self.correction_method.set("Без коррекции")
+        self.correction_method.pack(fill=tk.X, pady=5)
+        self.correction_method.bind("<<ComboboxSelected>>", self.apply_correction)
+
+        # Слайдер для гамма-коррекции
+        self.gamma_frame = Frame(self.correction_frame, bg="lightgray")
+        self.gamma_frame.pack(fill=tk.X, pady=5)
+        self.gamma_label = Label(self.gamma_frame, text="Гамма:", bg="lightgray")
+        self.gamma_label.pack(side=tk.LEFT)
+        self.gamma_scale = ttk.Scale(
+            self.gamma_frame,
+            from_=0.1,
+            to=3.0,
+            orient=tk.HORIZONTAL,
+            command=self.update_gamma,
+        )
+        self.gamma_scale.set(1.0)
+        self.gamma_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.gamma_value = Label(self.gamma_frame, text="1.0", bg="lightgray")
+        self.gamma_value.pack(side=tk.LEFT)
+
+        # Слайдер для S-образной коррекции
+        self.s_curve_frame = Frame(self.correction_frame, bg="lightgray")
+        self.s_curve_frame.pack(fill=tk.X, pady=5)
+        self.s_curve_label = Label(
+            self.s_curve_frame, text="Сила S-кривой:", bg="lightgray"
+        )
+        self.s_curve_label.pack(side=tk.LEFT)
+        self.s_curve_scale = ttk.Scale(
+            self.s_curve_frame,
+            from_=0.1,
+            to=5.0,
+            orient=tk.HORIZONTAL,
+            command=self.update_s_curve,
+        )
+        self.s_curve_scale.set(0.5)
+        self.s_curve_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.s_curve_value = Label(self.s_curve_frame, text="0.5", bg="lightgray")
+        self.s_curve_value.pack(side=tk.LEFT)
+
+        # Слайдер для логарифмической коррекции
+        self.log_frame = Frame(self.correction_frame, bg="lightgray")
+        self.log_frame.pack(fill=tk.X, pady=5)
+        self.log_label = Label(self.log_frame, text="Коэффициент C:", bg="lightgray")
+        self.log_label.pack(side=tk.LEFT)
+        self.log_scale = ttk.Scale(
+            self.log_frame,
+            from_=0.1,
+            to=5.0,
+            orient=tk.HORIZONTAL,
+            command=self.update_log,
+        )
+        self.log_scale.set(1.0)
+        self.log_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.log_value = Label(self.log_frame, text="1.0", bg="lightgray")
+        self.log_value.pack(side=tk.LEFT)
+
         # Текстовое поле для анализа изображения
         self.analysis_label = Label(
             self.bottom_frame, text="Анализ изображения:", font=("Arial", 10, "bold")
@@ -83,6 +209,71 @@ class ImageViewer:
 
         # Загружаем изображения
         self.load_images()
+
+    def update_gamma(self, value):
+        """Обновление значения гамма-коррекции"""
+        self.gamma_value.config(text=f"{float(value):.1f}")
+        if self.correction_method.get() == "Гамма-коррекция":
+            self.apply_correction(None)
+
+    def update_s_curve(self, value):
+        """Обновление значения S-образной коррекции"""
+        self.s_curve_value.config(text=f"{float(value):.1f}")
+        if self.correction_method.get() == "S-образная коррекция":
+            self.apply_correction(None)
+
+    def update_log(self, value):
+        """Обновление значения логарифмической коррекции"""
+        self.log_value.config(text=f"{float(value):.1f}")
+        if self.correction_method.get() == "Логарифмическая коррекция":
+            self.apply_correction(None)
+
+    def apply_correction(self, event):
+        """Применение выбранного метода коррекции"""
+        if not self.original_image:
+            return
+
+        method = self.correction_method.get()
+
+        if method == "Без коррекции":
+            self.current_image = self.original_image
+        elif method == "Линейное растяжение":
+            self.current_image = ImageCorrector.linear_stretch(self.original_image)
+        elif method == "S-образная коррекция":
+            strength = float(self.s_curve_scale.get())
+            self.current_image = ImageCorrector.s_curve_correction(
+                self.original_image, strength
+            )
+        elif method == "Гамма-коррекция":
+            gamma = float(self.gamma_scale.get())
+            self.current_image = ImageCorrector.gamma_correction(
+                self.original_image, gamma
+            )
+        elif method == "Логарифмическая коррекция":
+            c = float(self.log_scale.get())
+            self.current_image = ImageCorrector.logarithmic_correction(
+                self.original_image, c
+            )
+
+        self.display_image(self.current_image)
+        self.plot_histogram(self.current_image)
+        self.analyze_image(self.current_image)
+
+    def show_image_and_histogram(self, event):
+        """Отображаем выбранное изображение и его гистограмму"""
+        selection = self.image_list.curselection()
+        if not selection:
+            return
+
+        selected_image = self.image_list.get(selection[0])
+        image_path = os.path.join(self.folder_path, selected_image)
+
+        try:
+            self.original_image = Image.open(image_path)
+            self.current_image = self.original_image
+            self.apply_correction(None)
+        except Exception as e:
+            print(f"Ошибка при загрузке изображения: {e}")
 
     def load_images(self):
         """Загружаем список изображений с префиксом bw_"""
@@ -103,23 +294,6 @@ class ImageViewer:
                 self.show_image_and_histogram(None)
         except Exception as e:
             print(f"Ошибка при загрузке изображений: {e}")
-
-    def show_image_and_histogram(self, event):
-        """Отображаем выбранное изображение и его гистограмму"""
-        selection = self.image_list.curselection()
-        if not selection:
-            return
-
-        selected_image = self.image_list.get(selection[0])
-        image_path = os.path.join(self.folder_path, selected_image)
-
-        try:
-            img = Image.open(image_path)
-            self.display_image(img)
-            self.plot_histogram(img)
-            self.analyze_image(img)
-        except Exception as e:
-            print(f"Ошибка при загрузке изображения: {e}")
 
     def display_image(self, img):
         """Отображаем изображение с масштабированием"""
@@ -149,7 +323,7 @@ class ImageViewer:
         self.ax.hist(
             img_array.ravel(), bins=256, range=(0, 256), color="black", alpha=0.7
         )
-        self.ax.set_title("Гистограмма яркости")
+        self.ax.set_title("Гистограмма")
         self.ax.set_xlabel("Уровень яркости")
         self.ax.set_ylabel("Количество пикселей", labelpad=15)
         self.ax.set_xlim(0, 255)
