@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from pathlib import Path
 from image_processor import ImageProcessor
+import numpy as np
 
 
 class ImageDenoisingApp:
@@ -13,17 +14,18 @@ class ImageDenoisingApp:
     filter_names = {
         "median": "Медианный",
         "gaussian": "Гауссовский",
-        "bilateral": "Билатеральный",
-        "wiener": "Винеровский",
+        "ihpf": "Идеальный высокочастотный",
+        "ghpf": "Гауссов высокочастотный",
+        "bandpass": "Полосовой",
     }
 
-    # Noise type translations
-    noise_types = {
-        "Gaussian": "Гауссовский",
-        "Salt and Pepper": "Соль и перец",
-        "Poisson": "Пуассоновский",
-        "Speckle": "Спекл",
-        "Unknown": "Неизвестный",
+    # Noise type descriptions
+    noise_descriptions = {
+        "Гауссов шум": "Равномерный зернистый шум, характерный для цифровых камер",
+        "Импульсный шум (соль/перец)": "Точечные выбросы белого и черного цвета",
+        "Муар (периодический шум)": "Периодические узоры, возникающие при наложении регулярных структур",
+        "JPEG артефакты": "Блоки 8x8 пикселей, характерные для JPEG-сжатия",
+        "Квантование": "Ступенчатость градиентов из-за ограниченной глубины цвета",
     }
 
     def __init__(self, root):
@@ -35,42 +37,41 @@ class ImageDenoisingApp:
         # Bind window resize event
         self.root.bind("<Configure>", self.on_window_resize)
 
-        # Initialize image processor
-        self.processor = ImageProcessor()
+        # Initialize variables
+        self.current_image = None
+        self.processed_image = None
+        self.original_photo = None
+        self.processed_photo = None
+        self.histogram_canvas = None
+        self.psnr_canvas = None
+        self.fft_canvas = None
         self.current_file = None
 
-        # Updated default parameters for better results
+        # Список активных фильтров
+        self.active_filters = []
+
+        # Initialize image processor
+        self.processor = ImageProcessor()
+
+        # Updated default parameters
         self.filter_params = {
-            "median": {"kernel_size": 3},  # Smaller kernel for less blur
-            "gaussian": {
-                "kernel_size": (3, 3),
-                "sigma": 0.8,
-            },  # Smaller kernel, lower sigma
-            "bilateral": {
-                "d": 5,
-                "sigma_color": 75,
-                "sigma_space": 75,
-            },  # Adjusted for better detail preservation
-            "wiener": {
-                "kernel_size": 3,
-                "noise": 0.01,
-            },  # Smaller kernel, lower noise estimate
+            "median": {"kernel_size": 3},
+            "gaussian": {"kernel_size": (3, 3), "sigma": 0.8},
+            "ihpf": {"d0": 30},
+            "ghpf": {"d0": 30},
+            "bandpass": {"d0": 30, "w": 10},
         }
 
         # Parameter names in Russian
         self.param_names = {
             "kernel_size": "Размер ядра",
             "sigma": "Сигма",
-            "d": "Диаметр",
-            "sigma_color": "Сигма цвета",
-            "sigma_space": "Сигма пространства",
-            "noise": "Шум",
+            "d0": "Радиус отсечки",
+            "w": "Ширина полосы",
         }
 
-        # Store last used parameters for each filter
+        # Store last used parameters
         self.last_used_params = self.filter_params.copy()
-
-        # Store tk variables for parameter widgets
         self.param_vars = {ftype: {} for ftype in self.filter_params}
 
         # Create main container
@@ -85,14 +86,6 @@ class ImageDenoisingApp:
 
         # Create control panel
         self.create_control_panel()
-
-        # Initialize variables
-        self.current_image = None
-        self.processed_image = None
-        self.original_photo = None
-        self.processed_photo = None
-        self.histogram_canvas = None
-        self.psnr_canvas = None
 
         # Load initial directory
         self.load_initial_directory()
@@ -126,6 +119,8 @@ class ImageDenoisingApp:
             self.histogram_canvas.get_tk_widget().destroy()
         if hasattr(self, "psnr_canvas") and self.psnr_canvas:
             self.psnr_canvas.get_tk_widget().destroy()
+        if hasattr(self, "fft_canvas") and self.fft_canvas:
+            self.fft_canvas.get_tk_widget().destroy()
         plt.close("all")
         self.root.destroy()
 
@@ -156,6 +151,14 @@ class ImageDenoisingApp:
             self.tree_frame, text="Выбрать папку", command=self.select_directory
         )
         self.dir_button.pack(fill=tk.X, padx=5, pady=5)
+
+        # Add FFT spectrum frame
+        self.fft_frame = ttk.LabelFrame(self.tree_frame, text="FFT спектр")
+        self.fft_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Create initial empty FFT spectrum
+        self.fft_canvas = None
+        self.show_fft_spectrum()
 
     def create_workspace(self):
         """Create main workspace with image displays and charts"""
@@ -195,21 +198,25 @@ class ImageDenoisingApp:
         self.processed_canvas = tk.Canvas(self.processed_frame)
         self.processed_canvas.pack(fill=tk.BOTH, expand=True)
 
-        # Bottom left - Noise distribution
+        # Bottom left - Noise analysis
         self.noise_frame = ttk.LabelFrame(self.workspace, text="Анализ шума")
         self.noise_frame.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
         self.noise_frame.grid_propagate(False)
+
+        # Add scrollable text widget for noise info
+        self.noise_info = tk.Text(
+            self.noise_frame,
+            wrap=tk.WORD,
+            width=40,
+            height=10,
+            font=("TkDefaultFont", 10),
+        )
+        self.noise_info.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # Bottom right - PSNR chart
         self.psnr_frame = ttk.LabelFrame(self.workspace, text="Метрики качества")
         self.psnr_frame.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
         self.psnr_frame.grid_propagate(False)
-
-        # Info label for noise type
-        self.noise_info = ttk.Label(
-            self.noise_frame, text="Тип шума: Не проанализирован"
-        )
-        self.noise_info.pack(pady=5)
 
     def create_control_panel(self):
         """Create control panel with filter options"""
@@ -220,30 +227,48 @@ class ImageDenoisingApp:
 
         # Filter selection
         self.filter_var = tk.StringVar(value="median")
-        filters = ["median", "gaussian", "bilateral", "wiener"]
+        filters = list(self.filter_names.keys())
+
+        # Создаем фрейм для выбора фильтра и кнопки добавления
+        filter_select_frame = ttk.Frame(self.control_frame)
+        filter_select_frame.grid(
+            row=0, column=0, columnspan=len(filters) + 2, sticky="ew"
+        )
 
         for i, filter_name in enumerate(filters):
             ttk.Radiobutton(
-                self.control_frame,
+                filter_select_frame,
                 text=self.filter_names[filter_name],
                 value=filter_name,
                 variable=self.filter_var,
                 command=self.update_parameter_controls,
             ).grid(row=0, column=i, padx=5, pady=5)
 
-        # Parameter controls frame
-        self.param_frame = ttk.Frame(self.control_frame)
-        self.param_frame.grid(row=1, column=0, columnspan=len(filters) + 1, sticky="ew")
-
-        # Apply button
+        # Кнопка добавления фильтра
         ttk.Button(
-            self.control_frame, text="Применить фильтр", command=self.apply_filter
+            filter_select_frame, text="+", width=3, command=self.add_filter
         ).grid(row=0, column=len(filters), padx=5, pady=5)
 
-        # Save button
+        # Фрейм для списка активных фильтров
+        self.active_filters_frame = ttk.LabelFrame(
+            self.control_frame, text="Активные фильтры"
+        )
+        self.active_filters_frame.grid(
+            row=1, column=0, columnspan=len(filters) + 2, sticky="ew", padx=5, pady=5
+        )
+
+        # Parameter controls frame
+        self.param_frame = ttk.Frame(self.control_frame)
+        self.param_frame.grid(row=2, column=0, columnspan=len(filters) + 2, sticky="ew")
+
+        # Apply and Save buttons
+        ttk.Button(
+            self.control_frame, text="Применить фильтры", command=self.apply_filters
+        ).grid(row=3, column=0, padx=5, pady=5)
+
         ttk.Button(
             self.control_frame, text="Сохранить результат", command=self.save_result
-        ).grid(row=0, column=len(filters) + 1, padx=5, pady=5)
+        ).grid(row=3, column=1, padx=5, pady=5)
 
         # Initialize parameter controls
         self.update_parameter_controls()
@@ -398,10 +423,8 @@ class ImageDenoisingApp:
                     value = (width, height)
                 else:
                     value = int(value)
-            elif param in ["sigma", "noise"]:
+            elif param in ["sigma", "d0", "w"]:
                 value = float(value)
-            elif param in ["sigma_color", "sigma_space"]:
-                value = int(value)
 
             # Update the parameter in last_used_params
             if filter_type in self.last_used_params:
@@ -487,38 +510,31 @@ class ImageDenoisingApp:
             self.load_image(file_path)
 
     def load_image(self, file_path):
-        """Load and display selected image"""
+        """Загрузка изображения"""
         try:
-            # Clear previous resources
-            if hasattr(self, "histogram_canvas") and self.histogram_canvas:
-                self.histogram_canvas.get_tk_widget().destroy()
-            if hasattr(self, "psnr_canvas") and self.psnr_canvas:
-                self.psnr_canvas.get_tk_widget().destroy()
-            plt.close("all")
-
-            self.current_file = file_path
             self.current_image = self.processor.load_image(file_path)
+            self.current_file = file_path
 
-            # Clear previous processed image
-            self.processed_image = None
-            self.clear_processed_view()
-
-            # Display original image
+            # Отображение исходного изображения
             self.display_image(self.current_image, self.original_canvas)
 
-            # Analyze noise
-            noise_info = self.processor.analyze_noise(self.current_image)
-            self.noise_info.config(text=f"Тип шума: {noise_info}")
+            # Анализ шума и обновление информации
+            noise_type = self.processor.analyze_noise(self.current_image)
+            self.update_noise_info(noise_type)
 
-            # Generate histogram
+            # Обновление FFT спектра
+            self.show_fft_spectrum()
+
+            # Очистка обработанного изображения
+            self.clear_processed_view()
+
+            # Обновление гистограммы
             self.display_histogram()
 
         except Exception as e:
             messagebox.showerror(
                 "Ошибка", f"Не удалось загрузить изображение: {str(e)}"
             )
-            # Clear the tree selection
-            self.tree.selection_remove(self.tree.selection())
 
     def display_image(self, image, canvas):
         """Display image in the specified canvas"""
@@ -603,56 +619,131 @@ class ImageDenoisingApp:
         for widget in self.psnr_frame.winfo_children():
             widget.destroy()
 
-    def apply_filter(self):
-        """Apply selected filter to the image"""
+    def show_fft_spectrum(self):
+        """Показать FFT спектр изображения"""
+        # Очистка предыдущего содержимого
+        if self.fft_canvas:
+            self.fft_canvas.get_tk_widget().destroy()
+
+        # Создание фигуры matplotlib
+        fig = plt.figure(figsize=(4, 4))
+
+        if self.current_image is not None and self.processor.fft_spectrum is not None:
+            # Отображение спектра в логарифмической шкале
+            spectrum = np.log1p(self.processor.fft_spectrum)
+            plt.imshow(spectrum, cmap="gray")
+            plt.title("FFT спектр")
+            plt.axis("off")  # Скрываем оси
+        else:
+            plt.text(
+                0.5,
+                0.5,
+                "Загрузите изображение\nдля анализа спектра",
+                ha="center",
+                va="center",
+            )
+            plt.axis("off")
+
+        # Добавление на холст
+        self.fft_canvas = FigureCanvasTkAgg(fig, master=self.fft_frame)
+        self.fft_canvas.draw()
+        self.fft_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def update_noise_info(self, noise_type):
+        """Обновление информации о типе шума"""
+        metrics = self.processor.get_noise_metrics()
+
+        # Формирование подробного описания
+        description = f"Тип шума: {noise_type}\n\n"
+        description += "Метрики:\n"
+        description += f"• Стандартное отклонение: {metrics.get('image_std', 0):.3f}\n"
+        description += (
+            f"• Энтропия изображения: {metrics.get('image_entropy', 0):.3f}\n"
+        )
+        description += f"• Количество пиков в спектре: {metrics.get('fft_peaks', 0)}\n"
+
+        # Добавление рекомендаций по фильтрации
+        description += "\nРекомендуемые фильтры:\n"
+        if "импульсный" in noise_type.lower():
+            description += "• Медианный фильтр\n"
+        elif "гауссов" in noise_type.lower():
+            description += "• Гауссовский фильтр\n"
+        elif "муар" in noise_type.lower():
+            description += "• Полосовой фильтр\n"
+        elif "jpeg" in noise_type.lower():
+            description += "• Идеальный высокочастотный фильтр\n"
+
+        # Обновление текста
+        self.noise_info.delete(1.0, tk.END)
+        self.noise_info.insert(tk.END, description)
+
+    def add_filter(self):
+        """Добавление нового фильтра в список активных"""
+        filter_type = self.filter_var.get()
+        filter_name = self.filter_names[filter_type]
+
+        # Создаем фрейм для фильтра
+        filter_frame = ttk.Frame(self.active_filters_frame)
+        filter_frame.pack(fill=tk.X, padx=5, pady=2)
+
+        # Добавляем метку с названием фильтра
+        ttk.Label(filter_frame, text=filter_name).pack(side=tk.LEFT, padx=5)
+
+        # Добавляем кнопку удаления
+        ttk.Button(
+            filter_frame,
+            text="×",
+            width=2,
+            command=lambda f=filter_frame, ft=filter_type: self.remove_filter(f, ft),
+        ).pack(side=tk.RIGHT, padx=5)
+
+        # Сохраняем информацию о фильтре
+        self.active_filters.append(
+            {
+                "frame": filter_frame,
+                "type": filter_type,
+                "params": self.last_used_params[filter_type].copy(),
+            }
+        )
+
+    def remove_filter(self, filter_frame, filter_type):
+        """Удаление фильтра из списка активных"""
+        # Удаляем фрейм
+        filter_frame.destroy()
+
+        # Удаляем из списка активных фильтров
+        self.active_filters = [
+            f for f in self.active_filters if f["frame"] != filter_frame
+        ]
+
+    def apply_filters(self):
+        """Применение всех активных фильтров последовательно"""
         if self.current_image is None:
-            messagebox.showwarning("Предупреждение", "Изображение не загружено")
+            messagebox.showwarning("Предупреждение", "Сначала загрузите изображение")
             return
 
-        filter_type = self.filter_var.get()
+        if not self.active_filters:
+            messagebox.showwarning("Предупреждение", "Добавьте хотя бы один фильтр")
+            return
 
-        # Use last_used_params instead of filter_params
-        params = self.last_used_params[filter_type].copy()
+        # Начинаем с исходного изображения
+        result = self.current_image.copy()
 
-        try:
-            # Validate parameters before applying
-            if filter_type == "median":
-                if params["kernel_size"] % 2 == 0:
-                    params["kernel_size"] += 1  # Ensure odd kernel size
-            elif filter_type == "gaussian":
-                if isinstance(params["kernel_size"], tuple):
-                    w, h = params["kernel_size"]
-                    if w % 2 == 0:
-                        w += 1
-                    if h % 2 == 0:
-                        h += 1
-                    params["kernel_size"] = (w, h)
-            elif filter_type == "bilateral":
-                if params["d"] % 2 == 0:
-                    params["d"] += 1  # Ensure odd diameter
-            elif filter_type == "wiener":
-                if params["kernel_size"] % 2 == 0:
-                    params["kernel_size"] += 1  # Ensure odd kernel size
+        # Применяем каждый фильтр последовательно
+        for filter_info in self.active_filters:
+            filter_type = filter_info["type"]
+            params = filter_info["params"]
 
-            # Apply filter
-            self.processed_image = self.processor.apply_filter(
-                self.current_image, filter_type, **params
-            )
+            # Применяем фильтр
+            result = self.processor.apply_filter(result, filter_type, **params)
 
-            # Display processed image
-            self.display_image(self.processed_image, self.processed_canvas)
+        # Обновляем отображение
+        self.processed_image = result
+        self.display_image(self.processed_image, self.processed_canvas)
 
-            # Calculate and display PSNR
-            psnr = self.processor.calculate_psnr(
-                self.current_image, self.processed_image
-            )
-            if psnr is not None:
-                self.display_psnr(psnr)
-            else:
-                messagebox.showwarning("Предупреждение", "Не удалось рассчитать PSNR")
-
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось применить фильтр: {str(e)}")
+        # Расчет PSNR
+        psnr = self.processor.calculate_psnr(self.current_image, self.processed_image)
+        self.display_psnr(psnr)
 
     def display_psnr(self, psnr):
         """Display PSNR metric and comparison"""
@@ -685,14 +776,14 @@ class ImageDenoisingApp:
             )
 
         # Add text info
-        noise_info = self.noise_types.get(
+        noise_info = self.noise_descriptions.get(
             self.processor.noise_type, self.processor.noise_type
         )
         filter_type = self.filter_names[self.filter_var.get()]
         ax.text(
             0.5,
             -0.3,
-            f"Шум: {noise_info}\nФильтр: {filter_type}",
+            f"Шум: {noise_info}",
             ha="center",
             va="center",
             transform=ax.transAxes,

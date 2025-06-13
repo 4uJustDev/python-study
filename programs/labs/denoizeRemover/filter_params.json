@@ -1,0 +1,33 @@
+{
+    "median": {
+        "kernel_size": 3
+    },
+    "gaussian": {
+        "kernel_size": [
+            3,
+            3
+        ],
+        "sigma": 0.8
+    },
+    "ihpf": {
+        "D0": 30
+    },
+    "ghpf": {
+        "D0": 30,
+        "sigma": 1.0
+    },
+    "bandpass": {
+        "D0": 30,
+        "width": 10
+    },
+    "bandstop": {
+        "D0": 30,
+        "width": 10
+    },
+    "lpf": {
+        "D0": 30
+    },
+    "manual_mask": {
+        "mask": null
+    }
+}

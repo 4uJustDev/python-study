@@ -1,0 +1,210 @@
+2025-06-13 15:16:37 - INFO - Starting application
+2025-06-13 15:16:37 - INFO - Filter parameters saved
+2025-06-13 15:16:42 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:16:48 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:16:52 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:16:59 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:17:12 - INFO - FFT applied to image
+2025-06-13 15:17:14 - INFO - FFT applied to image
+2025-06-13 15:17:15 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:17:17 - INFO - FFT applied to image
+2025-06-13 15:17:19 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:17:21 - INFO - FFT applied to image
+2025-06-13 15:17:22 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:17:24 - INFO - FFT applied to image
+2025-06-13 15:17:28 - ERROR - Error applying filter to channel: OpenCV(4.11.0) D:\a\opencv-python\opencv-python\opencv\modules\imgproc\src\median_blur.dispatch.cpp:285: error: (-215:Assertion failed) (ksize % 2 == 1) && (_src0.dims() <= 2 ) in function 'cv::medianBlur'
+
+2025-06-13 15:17:32 - ERROR - Filter application error: unsupported operand type(s) for +: 'int' and 'NoneType'
+2025-06-13 15:17:33 - ERROR - Error applying filter to channel: OpenCV(4.11.0) D:\a\opencv-python\opencv-python\opencv\modules\imgproc\src\median_blur.dispatch.cpp:285: error: (-215:Assertion failed) (ksize % 2 == 1) && (_src0.dims() <= 2 ) in function 'cv::medianBlur'
+
+2025-06-13 15:17:35 - ERROR - Filter application error: unsupported operand type(s) for +: 'int' and 'NoneType'
+2025-06-13 15:17:36 - INFO - Application closed normally
+2025-06-13 15:19:07 - INFO - Starting application
+2025-06-13 15:19:09 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:19:10 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:19:18 - INFO - FFT applied to image
+2025-06-13 15:19:19 - INFO - FFT applied to image
+2025-06-13 15:19:19 - INFO - FFT applied to image
+2025-06-13 15:19:20 - INFO - FFT applied to image
+2025-06-13 15:19:25 - ERROR - Filter application error: unsupported operand type(s) for +: 'int' and 'NoneType'
+2025-06-13 15:19:25 - INFO - Application closed normally
+2025-06-13 15:20:45 - INFO - Starting application
+2025-06-13 15:20:47 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:20:48 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:20:50 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:20:52 - INFO - Application closed normally
+2025-06-13 15:21:11 - INFO - Starting application
+2025-06-13 15:21:12 - INFO - Application closed normally
+2025-06-13 15:21:46 - INFO - Starting application
+2025-06-13 15:21:47 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:21:48 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:21:50 - INFO - Application closed normally
+2025-06-13 15:25:53 - INFO - Starting application
+2025-06-13 15:25:56 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:25:57 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:25:58 - INFO - Application closed normally
+2025-06-13 15:26:40 - INFO - Starting application
+2025-06-13 15:26:42 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:26:43 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:26:50 - INFO - Application closed normally
+2025-06-13 15:27:20 - INFO - Starting application
+2025-06-13 15:27:21 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:27:23 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:27:27 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:27:28 - INFO - Application closed normally
+2025-06-13 15:27:53 - INFO - Starting application
+2025-06-13 15:27:55 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:27:56 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:27:58 - INFO - Application closed normally
+2025-06-13 15:29:10 - INFO - Starting application
+2025-06-13 15:29:12 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:29:13 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:29:16 - INFO - Application closed normally
+2025-06-13 15:30:25 - INFO - Starting application
+2025-06-13 15:30:27 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:30:28 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:30:30 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:30:31 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:30:31 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:30:32 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:30:35 - INFO - Applied median filter
+2025-06-13 15:30:39 - INFO - Applied gaussian filter
+2025-06-13 15:30:49 - INFO - Application closed normally
+2025-06-13 15:30:52 - INFO - Starting application
+2025-06-13 15:30:53 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:30:55 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:31:05 - INFO - Application closed normally
+2025-06-13 15:31:16 - INFO - Starting application
+2025-06-13 15:31:18 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:31:23 - INFO - Application closed normally
+2025-06-13 15:33:11 - INFO - Starting application
+2025-06-13 15:33:11 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:33:15 - INFO - Starting application
+2025-06-13 15:33:15 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:33:39 - INFO - Starting application
+2025-06-13 15:33:39 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "C:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "C:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "C:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:33:47 - INFO - Starting application
+2025-06-13 15:33:47 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:33:51 - INFO - Starting application
+2025-06-13 15:33:51 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:34:04 - INFO - Starting application
+2025-06-13 15:34:04 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:34:16 - INFO - Starting application
+2025-06-13 15:34:16 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:35:04 - INFO - Starting application
+2025-06-13 15:35:04 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:35:08 - INFO - Starting application
+2025-06-13 15:35:08 - ERROR - Critical error: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+Traceback (most recent call last):
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\main.py", line 31, in main
+    app = ImageDenoisingApp(root)
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 117, in __init__
+    self.create_workspace()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 241, in create_workspace
+    self.create_quadrants()
+  File "c:\Users\User\python-study\programs\labs\denoizeRemover\gui.py", line 284, in create_quadrants
+    self.noise_info = ttk.Label(self.noise_frame, text=self.noise_info_text)
+                                                       ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ImageDenoisingApp' object has no attribute 'noise_info_text'
+2025-06-13 15:36:16 - INFO - Starting application
+2025-06-13 15:36:18 - INFO - Detected noise type: Гауссовский
+2025-06-13 15:36:20 - INFO - Detected noise type: Соль и перец
+2025-06-13 15:36:25 - ERROR - Filter application error: unsupported operand type(s) for +: 'int' and 'NoneType'
+2025-06-13 15:36:26 - INFO - Application closed normally

@@ -2,6 +2,9 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
+from scipy.fft import fft2, ifft2, fftshift, ifftshift
+from scipy.stats import entropy
+from skimage.metrics import structural_similarity as ssim
 
 
 class ImageProcessor:
@@ -13,6 +16,8 @@ class ImageProcessor:
         self.psnr_value = None
         self.histogram_fig = None
         self.psnr_fig = None
+        self.fft_spectrum = None
+        self.noise_metrics = {}
 
     def load_image(self, file_path):
         """Load image from file"""
@@ -22,151 +27,249 @@ class ImageProcessor:
         return self.original_image
 
     def analyze_noise(self, image):
-        """Analyze the type of noise in the image"""
+        """Улучшенный анализ типа шума в изображении"""
         try:
-            # Convert to grayscale if needed
             if len(image.shape) == 3:
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             else:
                 gray = image
 
-            # Normalize image to 0-1 range
+            # Нормализация изображения
             gray = gray.astype(np.float32) / 255.0
 
-            # Calculate noise statistics
-            denoised = cv2.fastNlMeansDenoising((gray * 255).astype(np.uint8))
-            denoised = denoised.astype(np.float32) / 255.0
-            noise = gray - denoised
-            noise_std = np.std(noise)
+            # Анализ гистограммы
+            hist = cv2.calcHist([gray], [0], None, [256], [0, 1])
+            hist = hist.flatten() / hist.sum()
 
-            # Calculate noise pattern metrics
-            noise_fft = np.fft.fft2(noise)
-            noise_fft_shift = np.fft.fftshift(noise_fft)
-            magnitude_spectrum = np.abs(noise_fft_shift)
+            # Анализ FFT
+            f = fft2(gray)
+            fshift = fftshift(f)
+            magnitude_spectrum = np.abs(fshift)
+            self.fft_spectrum = magnitude_spectrum
 
-            # Calculate energy distribution in frequency domain
-            total_energy = np.sum(magnitude_spectrum)
-            center_energy = np.sum(
-                magnitude_spectrum[
-                    magnitude_spectrum.shape[0] // 2
-                    - 10 : magnitude_spectrum.shape[0] // 2
-                    + 10,
-                    magnitude_spectrum.shape[1] // 2
-                    - 10 : magnitude_spectrum.shape[1] // 2
-                    + 10,
-                ]
+            # Статистический анализ
+            noise_metrics = self._calculate_noise_metrics(
+                gray, hist, magnitude_spectrum
             )
-            energy_ratio = center_energy / total_energy if total_energy > 0 else 0
+            self.noise_metrics = noise_metrics
 
-            # Calculate noise spatial correlation
-            noise_normalized = (noise - noise.min()) / (
-                noise.max() - noise.min() + 1e-10
-            )
-            noise_normalized = (noise_normalized * 255).astype(np.uint8)
-            corr = cv2.matchTemplate(
-                noise_normalized, noise_normalized, cv2.TM_CCORR_NORMED
-            )
-            correlation_peak = np.max(corr)
-            correlation_std = np.std(corr)
-
-            # Determine noise category
-            if energy_ratio > 0.5 and correlation_peak > 2 * correlation_std:
-                self.noise_category = "детерминированный"
-            else:
-                self.noise_category = "случайный"
-
-            # Analyze specific noise type based on statistics
-            if self.noise_category == "случайный":
-                if noise_std < 0.02:  # ~5/255
-                    self.noise_type = "Низкий случайный шум"
-                elif noise_std < 0.08:  # ~20/255
-                    self.noise_type = "Гауссовский шум"
-                else:
-                    # Check for salt and pepper
-                    extreme_pixels = np.sum((gray == 0) | (gray == 1))
-                    if extreme_pixels / gray.size > 0.01:
-                        self.noise_type = "Шум типа соль и перец"
-                    else:
-                        self.noise_type = "Сильный гауссовский шум"
-            else:  # deterministic noise
-                # Check for periodic patterns
-                if energy_ratio > 0.7:
-                    self.noise_type = "Периодический шум"
-                # Check for structured patterns
-                elif correlation_peak > 3 * correlation_std:
-                    self.noise_type = "Структурированный шум"
-                else:
-                    self.noise_type = "Сложный детерминированный шум"
-
-            return f"{self.noise_type} ({self.noise_category})"
+            # Определение типа шума
+            noise_type = self._determine_noise_type(noise_metrics)
+            return noise_type
 
         except Exception as e:
             print(f"Ошибка анализа шума: {e}")
-            self.noise_type = "Ошибка анализа"
-            return self.noise_type
+            return "Ошибка анализа"
+
+    def _calculate_noise_metrics(self, image, hist, fft_spectrum):
+        """Расчет метрик для анализа шума"""
+        metrics = {}
+
+        # 1. Анализ гистограммы
+        metrics["hist_std"] = np.std(hist)
+        metrics["hist_entropy"] = entropy(hist)
+
+        # Поиск пиков в гистограмме
+        peaks, _ = signal.find_peaks(hist, height=np.mean(hist))
+        metrics["hist_peaks"] = len(peaks)
+
+        # Анализ экстремальных значений
+        extreme_pixels = np.sum((image == 0) | (image == 1))
+        metrics["extreme_ratio"] = extreme_pixels / image.size
+
+        # 2. Анализ FFT
+        # Нормализация спектра
+        fft_norm = fft_spectrum / np.max(fft_spectrum)
+
+        # Поиск пиков в спектре (исключая центральную область)
+        center_y, center_x = fft_spectrum.shape[0] // 2, fft_spectrum.shape[1] // 2
+        mask = np.ones_like(fft_spectrum, dtype=bool)
+        mask[center_y - 10 : center_y + 10, center_x - 10 : center_x + 10] = False
+        fft_peaks = fft_norm[mask] > 0.5
+        metrics["fft_peaks"] = np.sum(fft_peaks)
+
+        # Анализ крестообразных структур (JPEG артефакты)
+        cross_pattern = self._detect_cross_pattern(fft_spectrum)
+        metrics["cross_pattern_score"] = cross_pattern
+
+        # 3. Статистический анализ
+        # Энтропия изображения
+        metrics["image_entropy"] = entropy(image.flatten())
+
+        # Стандартное отклонение
+        metrics["image_std"] = np.std(image)
+
+        return metrics
+
+    def _detect_cross_pattern(self, spectrum):
+        """Обнаружение крестообразных структур в спектре (JPEG артефакты)"""
+        center_y, center_x = spectrum.shape[0] // 2, spectrum.shape[1] // 2
+
+        # Создаем маску для горизонтальных и вертикальных линий
+        mask = np.zeros_like(spectrum, dtype=bool)
+        mask[center_y - 2 : center_y + 2, :] = True
+        mask[:, center_x - 2 : center_x + 2] = True
+
+        # Нормализованный спектр
+        spectrum_norm = spectrum / np.max(spectrum)
+
+        # Подсчет ярких пикселей вдоль линий
+        cross_score = np.mean(spectrum_norm[mask])
+        return cross_score
+
+    def _determine_noise_type(self, metrics):
+        """Определение типа шума на основе метрик"""
+        # Проверка на импульсный шум
+        if metrics["extreme_ratio"] > 0.05:
+            return f"Импульсный шум (соль/перец) - {metrics['extreme_ratio']*100:.1f}% выбросов"
+
+        # Проверка на JPEG артефакты
+        if metrics["cross_pattern_score"] > 0.3:
+            return f"JPEG артефакты (сила: {metrics['cross_pattern_score']:.2f})"
+
+        # Проверка на муар
+        if metrics["fft_peaks"] > 5:
+            return f"Муар (периодический шум) - {metrics['fft_peaks']} пиков"
+
+        # Проверка на квантование
+        if metrics["hist_peaks"] > 10:
+            return f"Квантование - {metrics['hist_peaks']} уровней"
+
+        # Проверка на гауссов шум
+        if metrics["image_std"] > 0.1:
+            return f"Гауссов шум (STD={metrics['image_std']:.2f})"
+
+        return "Низкий уровень шума"
+
+    def get_noise_metrics(self):
+        """Получение метрик шума для отображения"""
+        return self.noise_metrics
 
     def apply_filter(self, image, filter_type, **params):
-        """Apply selected filter to the image"""
+        """Применение выбранного фильтра к изображению"""
         try:
             if len(image.shape) == 3:
-                # For color images, process in YCrCb color space
                 ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
                 y_channel = ycrcb[:, :, 0]
 
-                # Apply filter to Y channel
-                if filter_type == "wiener":
-                    kernel_size = params.get("kernel_size", 3)
-                    noise = params.get("noise", 0.01)
-                    filtered_y = signal.wiener(
-                        y_channel.astype(np.float32), (kernel_size, kernel_size), noise
-                    )
-                    filtered_y = np.clip(filtered_y, 0, 255).astype(np.uint8)
-                elif filter_type == "median":
-                    kernel_size = params.get("kernel_size", 3)
-                    filtered_y = cv2.medianBlur(y_channel, kernel_size)
-                elif filter_type == "gaussian":
-                    kernel_size = params.get("kernel_size", (3, 3))
-                    sigma = params.get("sigma", 0.8)
-                    filtered_y = cv2.GaussianBlur(y_channel, kernel_size, sigma)
-                elif filter_type == "bilateral":
-                    d = params.get("d", 5)
-                    sigma_color = params.get("sigma_color", 75)
-                    sigma_space = params.get("sigma_space", 75)
-                    filtered_y = cv2.bilateralFilter(
-                        y_channel, d, sigma_color, sigma_space
-                    )
+                filtered_y = self._apply_filter_to_channel(
+                    y_channel, filter_type, **params
+                )
 
-                # Replace Y channel with filtered version
                 ycrcb[:, :, 0] = filtered_y
-                # Convert back to BGR
                 return cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
             else:
-                # For grayscale images
-                if filter_type == "wiener":
-                    kernel_size = params.get("kernel_size", 3)
-                    noise = params.get("noise", 0.01)
-                    filtered = signal.wiener(
-                        image.astype(np.float32), (kernel_size, kernel_size), noise
-                    )
-                    return np.clip(filtered, 0, 255).astype(np.uint8)
-                elif filter_type == "median":
-                    kernel_size = params.get("kernel_size", 3)
-                    return cv2.medianBlur(image, kernel_size)
-                elif filter_type == "gaussian":
-                    kernel_size = params.get("kernel_size", (3, 3))
-                    sigma = params.get("sigma", 0.8)
-                    return cv2.GaussianBlur(image, kernel_size, sigma)
-                elif filter_type == "bilateral":
-                    d = params.get("d", 5)
-                    sigma_color = params.get("sigma_color", 75)
-                    sigma_space = params.get("sigma_space", 75)
-                    return cv2.bilateralFilter(image, d, sigma_color, sigma_space)
-
-            return image
+                return self._apply_filter_to_channel(image, filter_type, **params)
 
         except Exception as e:
-            print(f"Error applying filter: {e}")
+            print(f"Ошибка применения фильтра: {e}")
             return image
+
+    def _apply_filter_to_channel(self, channel, filter_type, **params):
+        """Применение фильтра к одному каналу"""
+        if filter_type == "ihpf":  # Идеальный высокочастотный фильтр
+            d0 = params.get("d0", 30)
+            return self._apply_ihpf(channel, d0)
+        elif filter_type == "ghpf":  # Гауссов высокочастотный фильтр
+            d0 = params.get("d0", 30)
+            return self._apply_ghpf(channel, d0)
+        elif filter_type == "bandpass":  # Полосовой фильтр
+            d0 = params.get("d0", 30)
+            w = params.get("w", 10)
+            return self._apply_bandpass(channel, d0, w)
+        elif filter_type == "median":
+            kernel_size = params.get("kernel_size", 3)
+            return cv2.medianBlur(channel, kernel_size)
+        elif filter_type == "gaussian":
+            kernel_size = params.get("kernel_size", (3, 3))
+            sigma = params.get("sigma", 0.8)
+            return cv2.GaussianBlur(channel, kernel_size, sigma)
+
+        return channel
+
+    def _apply_ihpf(self, image, d0):
+        """Применение идеального высокочастотного фильтра"""
+        # Нормализация входного изображения
+        image = image.astype(np.float32) / 255.0
+
+        f = fft2(image)
+        fshift = fftshift(f)
+
+        rows, cols = image.shape
+        crow, ccol = rows // 2, cols // 2
+
+        # Создание маски
+        mask = np.ones((rows, cols), dtype=np.float32)
+        r = max(d0, 1)  # Минимальное значение d0 = 1
+        center = [crow, ccol]
+        x, y = np.ogrid[:rows, :cols]
+        mask_area = (x - center[0]) ** 2 + (y - center[1]) ** 2 <= r * r
+        mask[mask_area] = 0
+
+        # Применение маски
+        fshift = fshift * mask
+        f_ishift = ifftshift(fshift)
+        img_back = ifft2(f_ishift)
+        img_back = np.abs(img_back)
+
+        # Нормализация результата
+        img_back = (img_back - img_back.min()) / (img_back.max() - img_back.min())
+        return np.clip(img_back * 255, 0, 255).astype(np.uint8)
+
+    def _apply_ghpf(self, image, d0):
+        """Применение гауссова высокочастотного фильтра"""
+        # Нормализация входного изображения
+        image = image.astype(np.float32) / 255.0
+
+        f = fft2(image)
+        fshift = fftshift(f)
+
+        rows, cols = image.shape
+        crow, ccol = rows // 2, cols // 2
+
+        # Создание гауссовой маски
+        x, y = np.meshgrid(np.arange(-crow, rows - crow), np.arange(-ccol, cols - ccol))
+        d = np.sqrt(x * x + y * y)
+        d0 = max(d0, 1)  # Минимальное значение d0 = 1
+        mask = 1 - np.exp(-(d**2) / (2 * d0**2))
+
+        # Применение маски
+        fshift = fshift * mask
+        f_ishift = ifftshift(fshift)
+        img_back = ifft2(f_ishift)
+        img_back = np.abs(img_back)
+
+        # Нормализация результата
+        img_back = (img_back - img_back.min()) / (img_back.max() - img_back.min())
+        return np.clip(img_back * 255, 0, 255).astype(np.uint8)
+
+    def _apply_bandpass(self, image, d0, w):
+        """Применение полосового фильтра"""
+        # Нормализация входного изображения
+        image = image.astype(np.float32) / 255.0
+
+        f = fft2(image)
+        fshift = fftshift(f)
+
+        rows, cols = image.shape
+        crow, ccol = rows // 2, cols // 2
+
+        # Создание полосовой маски
+        x, y = np.meshgrid(np.arange(-crow, rows - crow), np.arange(-ccol, cols - ccol))
+        d = np.sqrt(x * x + y * y)
+        d0 = max(d0, 1)  # Минимальное значение d0 = 1
+        w = max(w, 1)  # Минимальное значение w = 1
+        mask = np.exp(-((d - d0) ** 2) / (2 * w**2))
+
+        # Применение маски
+        fshift = fshift * mask
+        f_ishift = ifftshift(fshift)
+        img_back = ifft2(f_ishift)
+        img_back = np.abs(img_back)
+
+        # Нормализация результата
+        img_back = (img_back - img_back.min()) / (img_back.max() - img_back.min())
+        return np.clip(img_back * 255, 0, 255).astype(np.uint8)
 
     def calculate_psnr(self, original, processed):
         """Calculate PSNR between original and processed images"""
