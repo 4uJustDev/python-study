@@ -87,11 +87,10 @@ class EdgeDetectionApp:
         results_frame.pack(fill=tk.X, padx=10, pady=5)
 
         self.results_tree = ttk.Treeview(
-            results_frame, columns=("operator", "area", "efficiency"), show="headings"
+            results_frame, columns=("operator", "area"), show="headings"
         )
         self.results_tree.heading("operator", text="Оператор")
         self.results_tree.heading("area", text="Площадь контуров")
-        self.results_tree.heading("efficiency", text="Эффективность")
         self.results_tree.pack(fill=tk.X, padx=5, pady=5)
 
     def load_image(self):
@@ -137,14 +136,80 @@ class EdgeDetectionApp:
 
         operator = self.current_operator.get()
         try:
-            if operator == "sobel":
+            if operator == "roberts":
+                self.processed_image = self.apply_roberts(self.original_image)
+            elif operator == "prewitt":
+                self.processed_image = self.apply_prewitt(self.original_image)
+            elif operator == "sobel":
                 self.processed_image = self.apply_sobel(self.original_image)
-            # Добавление других операторов будет реализовано позже
+            elif operator == "log":
+                self.processed_image = self.apply_log(self.original_image)
+            elif operator == "canny":
+                self.processed_image = self.apply_canny(self.original_image)
 
             self.display_image(self.processed_image, self.processed_image_label)
             self.update_results(operator)
         except Exception as e:
             messagebox.showerror("Ошибка", f"Ошибка при применении оператора: {str(e)}")
+
+    def apply_roberts(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Ядра Робертса
+        kernel_x = np.array([[1, 0], [0, -1]], dtype=np.float32)
+        kernel_y = np.array([[0, 1], [-1, 0]], dtype=np.float32)
+
+        # Применение оператора
+        roberts_x = cv2.filter2D(gray, -1, kernel_x)
+        roberts_y = cv2.filter2D(gray, -1, kernel_y)
+
+        # Вычисление градиента
+        roberts = np.sqrt(np.square(roberts_x) + np.square(roberts_y))
+        roberts = np.uint8(roberts * 255 / np.max(roberts))
+
+        return cv2.cvtColor(roberts, cv2.COLOR_GRAY2BGR)
+
+    def apply_prewitt(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Ядра Превитта
+        kernel_x = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]], dtype=np.float32)
+        kernel_y = np.array([[-1, -1, -1], [0, 0, 0], [1, 1, 1]], dtype=np.float32)
+
+        # Применение оператора
+        prewitt_x = cv2.filter2D(gray, -1, kernel_x)
+        prewitt_y = cv2.filter2D(gray, -1, kernel_y)
+
+        # Вычисление градиента
+        prewitt = np.sqrt(np.square(prewitt_x) + np.square(prewitt_y))
+        prewitt = np.uint8(prewitt * 255 / np.max(prewitt))
+
+        return cv2.cvtColor(prewitt, cv2.COLOR_GRAY2BGR)
+
+    def apply_log(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Применение размытия по Гауссу
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        # Применение оператора Лапласа
+        laplacian = cv2.Laplacian(blurred, cv2.CV_64F)
+
+        # Нормализация результата
+        log = np.uint8(np.absolute(laplacian) * 255 / np.max(np.absolute(laplacian)))
+
+        return cv2.cvtColor(log, cv2.COLOR_GRAY2BGR)
+
+    def apply_canny(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Применение размытия по Гауссу
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        # Применение оператора Канни
+        canny = cv2.Canny(blurred, threshold1=100, threshold2=200)
+
+        return cv2.cvtColor(canny, cv2.COLOR_GRAY2BGR)
 
     def apply_sobel(self, image):
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -164,7 +229,7 @@ class EdgeDetectionApp:
         area = np.sum(binary > 0)
 
         # Добавление результатов в таблицу
-        self.results_tree.insert("", "end", values=(operator, area, "В разработке"))
+        self.results_tree.insert("", "end", values=(operator, area))
 
     def save_result(self):
         if self.processed_image is None:
