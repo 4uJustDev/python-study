@@ -4,9 +4,109 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 import tkinter as tk
-from tkinter import filedialog, Listbox, Scrollbar, Frame, Label, Text, END, ttk
+from tkinter import (
+    filedialog,
+    Listbox,
+    Scrollbar,
+    Frame,
+    Label,
+    Text,
+    END,
+    ttk,
+    LabelFrame,
+)
 from skimage import exposure
 import cv2
+from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+from matplotlib.figure import Figure
+
+
+class FunctionVisualizer(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Визуализация функции преобразования")
+        self.geometry("600x400")
+
+        # Создаем фигуру matplotlib
+        self.fig = Figure(figsize=(6, 4), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+
+        # Создаем холст для отображения графика
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # Добавляем панель инструментов
+        self.toolbar = NavigationToolbar2Tk(self.canvas, self)
+        self.toolbar.update()
+
+        # Инициализируем график
+        self.update_plot("none")
+
+    def update_plot(self, method, **params):
+        """Обновление графика в зависимости от выбранного метода"""
+        self.ax.clear()
+        x = np.linspace(0, 255, 256)
+
+        if method == "logarithmic":
+            c = params.get("c", 45)
+            y = c * np.log(1 + x)
+            self.ax.plot(x, y, "b-", label=f"c = {c}")
+            self.ax.set_title("Логарифмическое преобразование")
+
+        elif method == "power":
+            gamma = params.get("gamma", 1.0)
+            y = 255 * (x / 255) ** gamma
+            self.ax.plot(x, y, "b-", label=f"γ = {gamma:.1f}")
+            self.ax.set_title("Степенное преобразование")
+
+        elif method == "piecewise":
+            threshold = params.get("threshold", 128)
+            slope_low = params.get("slope_low", 0.5)
+            slope_high = params.get("slope_high", 1.5)
+
+            y = np.piecewise(
+                x,
+                [x < threshold, x >= threshold],
+                [
+                    lambda x: slope_low * x,
+                    lambda x: slope_low * threshold + slope_high * (x - threshold),
+                ],
+            )
+
+            self.ax.plot(
+                x,
+                y,
+                "b-",
+                label=f"Порог = {threshold}, k₁ = {slope_low:.1f}, k₂ = {slope_high:.1f}",
+            )
+            self.ax.set_title("Кусочно-линейное преобразование")
+
+        elif method == "gaussian":
+            mean = params.get("mean", 128)
+            std = params.get("std", 50)
+            y = 255 * np.exp(-((x - mean) ** 2) / (2 * std**2))
+            self.ax.plot(x, y, "b-", label=f"μ = {mean}, σ = {std}")
+            self.ax.set_title("Гауссово распределение")
+
+        elif method == "exponential":
+            lambda_param = params.get("lambda_param", 0.05)
+            y = 255 * (1 - np.exp(-lambda_param * x))
+            self.ax.plot(x, y, "b-", label=f"λ = {lambda_param:.2f}")
+            self.ax.set_title("Экспоненциальное распределение")
+
+        else:
+            # Линейное преобразование (y = x)
+            self.ax.plot(x, x, "b-", label="y = x")
+            self.ax.set_title("Линейное преобразование")
+
+        # Настройка осей и сетки
+        self.ax.grid(True, linestyle="--", alpha=0.7)
+        self.ax.set_xlabel("Входное значение")
+        self.ax.set_ylabel("Выходное значение")
+        self.ax.legend()
+
+        # Обновление холста
+        self.canvas.draw()
 
 
 class ImageCorrector:
@@ -111,6 +211,10 @@ class ImageViewer:
         self.root = root
         self.root.title("Градационная коррекция чёрно-белых изображений")
 
+        # Создаем окно визуализации функций
+        self.function_visualizer = FunctionVisualizer(root)
+        self.function_visualizer.withdraw()  # Скрываем окно при старте
+
         # Установим начальный путь к папке с изображениями
         self.folder_path = "photos/"
 
@@ -176,18 +280,27 @@ class ImageViewer:
         )
         self.btn_change_folder.pack(pady=10, fill=tk.X)
 
-        # Фрейм для методов коррекции
-        self.correction_frame = Frame(self.left_frame, bg="lightgray")
-        self.correction_frame.pack(fill=tk.X, pady=10)
-
-        # Первый комбобокс: Базовые преобразования
-        self.basic_label = Label(
-            self.correction_frame, text="Базовые преобразования:", bg="lightgray"
+        # Фрейм для формул
+        self.formula_frame = LabelFrame(
+            self.left_frame, text="Формула преобразования", bg="#f8f8f8"
         )
-        self.basic_label.pack(anchor="w")
+        self.formula_frame.pack(fill=tk.X, pady=5, padx=5)
+
+        self.formula_text = Text(
+            self.formula_frame, height=4, wrap=tk.WORD, bg="#f8f8f8", font=("Arial", 10)
+        )
+        self.formula_text.pack(fill=tk.X, padx=5, pady=5)
+        self.formula_text.insert(END, "Выберите метод преобразования")
+        self.formula_text.config(state=tk.DISABLED)
+
+        # Фрейм для базовых преобразований
+        self.basic_frame = LabelFrame(
+            self.left_frame, text="Базовые преобразования", bg="#f0f8ff"
+        )
+        self.basic_frame.pack(fill=tk.X, pady=5, padx=5)
 
         self.basic_method = ttk.Combobox(
-            self.correction_frame,
+            self.basic_frame,
             values=[
                 "Без коррекции",
                 "Полярность",
@@ -198,17 +311,17 @@ class ImageViewer:
             state="readonly",
         )
         self.basic_method.set("Без коррекции")
-        self.basic_method.pack(fill=tk.X, pady=5)
-        self.basic_method.bind("<<ComboboxSelected>>", self.update_correction_ui)
+        self.basic_method.pack(fill=tk.X, pady=5, padx=5)
+        self.basic_method.bind("<<ComboboxSelected>>", self.on_basic_method_change)
 
-        # Второй комбобокс: Коррекции гистограмм
-        self.hist_label = Label(
-            self.correction_frame, text="Коррекции гистограмм:", bg="lightgray"
+        # Фрейм для гистограммных преобразований
+        self.hist_frame = LabelFrame(
+            self.left_frame, text="Гистограммные преобразования", bg="#f5f5f5"
         )
-        self.hist_label.pack(anchor="w")
+        self.hist_frame.pack(fill=tk.X, pady=5, padx=5)
 
         self.hist_method = ttk.Combobox(
-            self.correction_frame,
+            self.hist_frame,
             values=[
                 "Без коррекции",
                 "Нормализация",
@@ -218,26 +331,34 @@ class ImageViewer:
             state="readonly",
         )
         self.hist_method.set("Без коррекции")
-        self.hist_method.pack(fill=tk.X, pady=5)
-        self.hist_method.bind("<<ComboboxSelected>>", self.update_correction_ui)
+        self.hist_method.pack(fill=tk.X, pady=5, padx=5)
+        self.hist_method.bind("<<ComboboxSelected>>", self.on_hist_method_change)
 
-        # Третий комбобокс: Функции распределения
-        self.dist_label = Label(
-            self.correction_frame, text="Функция распределения:", bg="lightgray"
+        # Фрейм для параметров функции
+        self.function_frame = LabelFrame(
+            self.left_frame, text="Параметры функции", bg="#f0f0f0"
         )
-        self.dist_label.pack(anchor="w")
+        self.function_frame.pack(fill=tk.X, pady=5, padx=5)
 
         self.dist_method = ttk.Combobox(
-            self.correction_frame,
+            self.function_frame,
             values=["Гауссова", "Экспоненциальная"],
             state="readonly",
         )
         self.dist_method.set("Гауссова")
-        self.dist_method.pack(fill=tk.X, pady=5)
-        self.dist_method.bind("<<ComboboxSelected>>", self.update_correction_ui)
+        self.dist_method.pack(fill=tk.X, pady=5, padx=5)
+        self.dist_method.bind("<<ComboboxSelected>>", self.on_dist_method_change)
+
+        # Кнопка для показа/скрытия окна визуализации
+        self.btn_show_visualizer = tk.Button(
+            self.left_frame,
+            text="Показать визуализацию функции",
+            command=self.toggle_visualizer,
+        )
+        self.btn_show_visualizer.pack(pady=5, fill=tk.X)
 
         # Фреймы для параметров
-        self.params_frame = Frame(self.correction_frame, bg="lightgray")
+        self.params_frame = Frame(self.left_frame, bg="lightgray")
         self.params_frame.pack(fill=tk.X, pady=5)
 
         # Параметры для логарифмического преобразования
@@ -392,6 +513,45 @@ class ImageViewer:
         # Загружаем изображения
         self.load_images()
 
+    def toggle_visualizer(self):
+        """Показать/скрыть окно визуализации функций"""
+        if self.function_visualizer.state() == "withdrawn":
+            self.function_visualizer.deiconify()
+            self.btn_show_visualizer.config(text="Скрыть визуализацию функции")
+        else:
+            self.function_visualizer.withdraw()
+            self.btn_show_visualizer.config(text="Показать визуализацию функции")
+
+    def update_formula(self):
+        """Обновление отображаемой формулы"""
+        self.formula_text.config(state=tk.NORMAL)
+        self.formula_text.delete(1.0, END)
+
+        basic_method = self.basic_method.get()
+        hist_method = self.hist_method.get()
+        dist_method = self.dist_method.get()
+
+        if basic_method == "Полярность":
+            formula = "I_out = 255 - I_in"
+        elif basic_method == "Логарифмическое":
+            formula = "I_out = c * log(1 + I_in)"
+        elif basic_method == "Степенное (гамма)":
+            formula = "I_out = 255 * (I_in/255)^γ"
+        elif basic_method == "Кусочно-линейное":
+            formula = (
+                "I_out = a*I_in (при I_in < T)\nI_out = b*(I_in-T)+a*T (при I_in >= T)"
+            )
+        elif hist_method == "Приведение к заданной функции":
+            if dist_method == "Гауссова":
+                formula = "PDF = exp(-(x-μ)²/(2σ²))"
+            else:  # Экспоненциальная
+                formula = "PDF = λ * exp(-λx)"
+        else:
+            formula = "Выберите метод преобразования"
+
+        self.formula_text.insert(END, formula)
+        self.formula_text.config(state=tk.DISABLED)
+
     def update_correction_ui(self, event=None):
         """Обновление интерфейса в зависимости от выбранных методов"""
         # Скрываем все фреймы параметров
@@ -405,8 +565,7 @@ class ImageViewer:
         self.mean_frame.pack_forget()
         self.std_frame.pack_forget()
         self.exp_frame.pack_forget()
-        self.dist_label.pack_forget()
-        self.dist_method.pack_forget()
+        self.function_frame.pack_forget()
 
         # Показываем нужные элементы в зависимости от выбранных методов
         basic_method = self.basic_method.get()
@@ -423,8 +582,7 @@ class ImageViewer:
             self.slope_high_frame.pack(fill=tk.X, pady=5)
 
         if hist_method == "Приведение к заданной функции":
-            self.dist_label.pack(anchor="w")
-            self.dist_method.pack(fill=tk.X, pady=5)
+            self.function_frame.pack(fill=tk.X, pady=5)
 
             if self.dist_method.get() == "Гауссова":
                 self.gaussian_frame.pack(fill=tk.X, pady=5)
@@ -433,37 +591,86 @@ class ImageViewer:
             else:  # Экспоненциальная
                 self.exp_frame.pack(fill=tk.X, pady=5)
 
+        # Обновляем формулу
+        self.update_formula()
+
+        # Обновляем визуализацию функции
+        self.update_function_visualization()
+
         self.apply_correction()
+
+    def update_function_visualization(self):
+        """Обновление визуализации функции в зависимости от выбранного метода"""
+        if not hasattr(self, "function_visualizer"):
+            self.function_visualizer = FunctionVisualizer(self)
+
+        method = self.basic_method.get()
+        if method == "Логарифмическое":
+            c = float(self.log_scale.get())
+            self.function_visualizer.update_plot("logarithmic", c=c)
+        elif method == "Степенное (гамма)":
+            gamma = float(self.gamma_scale.get())
+            self.function_visualizer.update_plot("power", gamma=gamma)
+        elif method == "Кусочно-линейное":
+            threshold = float(self.threshold_scale.get())
+            slope_low = float(self.slope_low_scale.get())
+            slope_high = float(self.slope_high_scale.get())
+            self.function_visualizer.update_plot(
+                "piecewise",
+                threshold=threshold,
+                slope_low=slope_low,
+                slope_high=slope_high,
+            )
+        elif (
+            self.hist_method.get() == "Приведение к заданной функции"
+            and self.dist_method.get() == "Гауссова"
+        ):
+            mean = float(self.mean_scale.get())
+            std = float(self.std_scale.get())
+            self.function_visualizer.update_plot("gaussian", mean=mean, std=std)
+        elif (
+            self.hist_method.get() == "Приведение к заданной функции"
+            and self.dist_method.get() == "Экспоненциальная"
+        ):
+            lambda_param = float(self.lambda_scale.get())
+            self.function_visualizer.update_plot(
+                "exponential", lambda_param=lambda_param
+            )
 
     def update_log(self, value):
         """Обновление значения логарифмического преобразования"""
         self.log_value.config(text=f"{float(value):.0f}")
         if self.basic_method.get() == "Логарифмическое":
             self.apply_correction()
+            self.update_function_visualization()
 
     def update_gamma(self, value):
         """Обновление значения гамма-коррекции"""
         self.gamma_value.config(text=f"{float(value):.1f}")
         if self.basic_method.get() == "Степенное (гамма)":
             self.apply_correction()
+            self.update_function_visualization()
 
     def update_threshold(self, value):
         """Обновление значения порога для кусочно-линейного преобразования"""
         self.threshold_value.config(text=f"{float(value):.0f}")
         if self.basic_method.get() == "Кусочно-линейное":
             self.apply_correction()
+            self.update_function_visualization()
 
     def update_slope_low(self, value):
         """Обновление значения наклона для темных пикселей"""
         self.slope_low_value.config(text=f"{float(value):.1f}")
         if self.basic_method.get() == "Кусочно-линейное":
             self.apply_correction()
+            self.update_function_visualization()
 
     def update_slope_high(self, value):
         """Обновление значения наклона для светлых пикселей"""
         self.slope_high_value.config(text=f"{float(value):.1f}")
         if self.basic_method.get() == "Кусочно-линейное":
             self.apply_correction()
+            self.update_function_visualization()
 
     def update_mean(self, value):
         """Обновление значения среднего для гауссова распределения"""
@@ -473,6 +680,7 @@ class ImageViewer:
             and self.dist_method.get() == "Гауссова"
         ):
             self.apply_correction()
+            self.update_function_visualization()
 
     def update_std(self, value):
         """Обновление значения стандартного отклонения для гауссова распределения"""
@@ -482,6 +690,7 @@ class ImageViewer:
             and self.dist_method.get() == "Гауссова"
         ):
             self.apply_correction()
+            self.update_function_visualization()
 
     def update_lambda(self, value):
         """Обновление значения λ для экспоненциального распределения"""
@@ -491,6 +700,7 @@ class ImageViewer:
             and self.dist_method.get() == "Экспоненциальная"
         ):
             self.apply_correction()
+            self.update_function_visualization()
 
     def apply_correction(self, event=None):
         """Применение выбранных методов коррекции"""
@@ -754,6 +964,24 @@ class ImageViewer:
         if folder:
             self.folder_path = folder
             self.load_images()
+
+    def on_basic_method_change(self, event=None):
+        """Обработчик изменения базового метода преобразования"""
+        self.update_correction_ui()
+        self.apply_correction()
+        self.update_function_visualization()
+
+    def on_hist_method_change(self, event=None):
+        """Обработчик изменения метода коррекции гистограммы"""
+        self.update_correction_ui()
+        self.apply_correction()
+        self.update_function_visualization()
+
+    def on_dist_method_change(self, event=None):
+        """Обработчик изменения метода распределения"""
+        self.update_correction_ui()
+        self.apply_correction()
+        self.update_function_visualization()
 
 
 if __name__ == "__main__":
