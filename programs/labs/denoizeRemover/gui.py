@@ -220,10 +220,17 @@ class ImageDenoisingApp:
 
     def create_control_panel(self):
         """Create control panel with filter options"""
-        self.control_frame = ttk.LabelFrame(self.workspace, text="Управление фильтрами")
-        self.control_frame.grid(
+        # Создаем основной контейнер для панели управления
+        control_container = ttk.Frame(self.workspace)
+        control_container.grid(
             row=2, column=0, columnspan=2, padx=5, pady=5, sticky="ew"
         )
+
+        # Панель управления фильтрами
+        self.control_frame = ttk.LabelFrame(
+            control_container, text="Управление фильтрами"
+        )
+        self.control_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
         # Filter selection
         self.filter_var = tk.StringVar(value="median")
@@ -231,9 +238,7 @@ class ImageDenoisingApp:
 
         # Создаем фрейм для выбора фильтра и кнопки добавления
         filter_select_frame = ttk.Frame(self.control_frame)
-        filter_select_frame.grid(
-            row=0, column=0, columnspan=len(filters) + 2, sticky="ew"
-        )
+        filter_select_frame.pack(fill=tk.X, padx=5, pady=5)
 
         for i, filter_name in enumerate(filters):
             ttk.Radiobutton(
@@ -249,26 +254,29 @@ class ImageDenoisingApp:
             filter_select_frame, text="+", width=3, command=self.add_filter
         ).grid(row=0, column=len(filters), padx=5, pady=5)
 
-        # Фрейм для списка активных фильтров
-        self.active_filters_frame = ttk.LabelFrame(
-            self.control_frame, text="Активные фильтры"
-        )
-        self.active_filters_frame.grid(
-            row=1, column=0, columnspan=len(filters) + 2, sticky="ew", padx=5, pady=5
-        )
-
         # Parameter controls frame
         self.param_frame = ttk.Frame(self.control_frame)
-        self.param_frame.grid(row=2, column=0, columnspan=len(filters) + 2, sticky="ew")
+        self.param_frame.pack(fill=tk.X, padx=5, pady=5)
 
         # Apply and Save buttons
-        ttk.Button(
-            self.control_frame, text="Применить фильтры", command=self.apply_filters
-        ).grid(row=3, column=0, padx=5, pady=5)
+        button_frame = ttk.Frame(self.control_frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
 
         ttk.Button(
-            self.control_frame, text="Сохранить результат", command=self.save_result
-        ).grid(row=3, column=1, padx=5, pady=5)
+            button_frame, text="Применить фильтры", command=self.apply_filters
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            button_frame, text="Сохранить результат", command=self.save_result
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Фрейм для списка активных фильтров
+        self.active_filters_frame = ttk.LabelFrame(
+            control_container, text="Активные фильтры"
+        )
+        self.active_filters_frame.pack(
+            side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0)
+        )
 
         # Initialize parameter controls
         self.update_parameter_controls()
@@ -689,6 +697,57 @@ class ImageDenoisingApp:
         # Добавляем метку с названием фильтра
         ttk.Label(filter_frame, text=filter_name).pack(side=tk.LEFT, padx=5)
 
+        # Собираем текущие параметры фильтра
+        params = {}
+        for param_name, var in self.param_vars[filter_type].items():
+            if isinstance(var, (tk.StringVar, tk.IntVar)):
+                try:
+                    value = int(var.get())
+                    if param_name == "kernel_size" and filter_type == "gaussian":
+                        value = (value, value)
+                        value = tuple(v if v % 2 == 1 else v + 1 for v in value)
+                    if param_name == "kernel_size" and filter_type == "median":
+                        if value % 2 == 0:
+                            value += 1
+                        if value < 3:
+                            value = 3
+                    if param_name in ["d0", "w"] and value < 1:
+                        value = 1
+                    params[param_name] = value
+                except Exception:
+                    continue
+            elif isinstance(var, tk.DoubleVar):
+                value = float(var.get())
+                if param_name == "sigma" and value < 0.01:
+                    value = 0.01
+                params[param_name] = value
+            elif isinstance(var, list):
+                try:
+                    width = int(var[0].get())
+                    height = int(var[1].get())
+                    width = width if width % 2 == 1 else width + 1
+                    height = height if height % 2 == 1 else height + 1
+                    if width < 3:
+                        width = 3
+                    if height < 3:
+                        height = 3
+                    params[param_name] = (width, height)
+                except Exception:
+                    continue
+
+        # Создаем строку с параметрами
+        params_text = []
+        for param_name, value in params.items():
+            param_label = self.param_names.get(param_name, param_name)
+            if isinstance(value, tuple):
+                params_text.append(f"{param_label}: {value[0]}x{value[1]}")
+            else:
+                params_text.append(f"{param_label}: {value}")
+
+        # Добавляем метку с параметрами
+        params_label = ttk.Label(filter_frame, text=" | ".join(params_text))
+        params_label.pack(side=tk.LEFT, padx=5)
+
         # Добавляем кнопку удаления
         ttk.Button(
             filter_frame,
@@ -699,11 +758,7 @@ class ImageDenoisingApp:
 
         # Сохраняем информацию о фильтре
         self.active_filters.append(
-            {
-                "frame": filter_frame,
-                "type": filter_type,
-                "params": self.last_used_params[filter_type].copy(),
-            }
+            {"frame": filter_frame, "type": filter_type, "params": params}
         )
 
     def remove_filter(self, filter_frame, filter_type):
