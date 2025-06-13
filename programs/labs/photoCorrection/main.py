@@ -6,71 +6,110 @@ from PIL import Image, ImageTk
 import tkinter as tk
 from tkinter import filedialog, Listbox, Scrollbar, Frame, Label, Text, END, ttk
 from skimage import exposure
+import cv2
 
 
 class ImageCorrector:
     @staticmethod
-    def linear_stretch(image):
-        """Линейное растяжение гистограммы"""
+    def polarity(image):
+        """Инверсия изображения (полярность)"""
         img_array = np.array(image)
-        p2, p98 = np.percentile(img_array, (2, 98))
-        img_stretched = exposure.rescale_intensity(img_array, in_range=(p2, p98))
-        return Image.fromarray(img_stretched)
+        return Image.fromarray(255 - img_array)
 
     @staticmethod
-    def s_curve_correction(image, strength=0.5):
-        """Нелинейные преобразования (S-образная коррекция)"""
+    def logarithmic(image, c=45):
+        """Логарифмическое преобразование"""
         img_array = np.array(image).astype(float)
-        # Нормализация значений в диапазон [0, 1]
-        img_norm = img_array / 255.0
-
-        # Применение S-образной кривой
-        # Используем сигмоидную функцию с настраиваемой силой эффекта
-        img_s = 1 / (1 + np.exp(-strength * (img_norm - 0.5)))
-
-        # Обратное масштабирование в диапазон [0, 255]
-        img_s = (img_s * 255).astype(np.uint8)
-        return Image.fromarray(img_s)
+        img_log = c * np.log(1 + img_array)
+        img_log = np.clip(img_log, 0, 255).astype(np.uint8)
+        return Image.fromarray(img_log)
 
     @staticmethod
-    def gamma_correction(image, gamma=1.0):
-        """Гамма-коррекция"""
+    def gamma(image, gamma=1.0):
+        """Степенное преобразование (гамма-коррекция)"""
         img_array = np.array(image)
         img_gamma = exposure.adjust_gamma(img_array, gamma)
         return Image.fromarray(img_gamma)
 
     @staticmethod
-    def logarithmic_correction(image, c=1.0):
-        """Коррекция через логарифмическое преобразование"""
+    def piecewise_linear(image, threshold=128, slope_low=0.5, slope_high=1.5):
+        """Кусочно-линейное преобразование"""
         img_array = np.array(image).astype(float)
 
-        # Нормализация значений в диапазон [0, 1]
-        img_norm = img_array / 255.0
+        # Создаем маску для темных и светлых пикселей
+        mask_dark = img_array < threshold
+        mask_light = ~mask_dark
 
-        # Применение логарифмического преобразования
-        # Формула: c * log(1 + x)
-        # Используем натуральный логарифм (ln)
-        img_log = c * np.log(1 + img_norm)
+        # Применяем разные наклоны
+        result = np.zeros_like(img_array)
+        result[mask_dark] = slope_low * img_array[mask_dark]
+        result[mask_light] = threshold + slope_high * (
+            img_array[mask_light] - threshold
+        )
 
-        # Нормализация результата
-        # Находим минимальное и максимальное значения
-        min_val = np.min(img_log)
-        max_val = np.max(img_log)
+        # Нормализация в диапазон [0, 255]
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        return Image.fromarray(result)
 
-        # Нормализация в диапазон [0, 1]
-        if max_val > min_val:  # Избегаем деления на ноль
-            img_log = (img_log - min_val) / (max_val - min_val)
+    @staticmethod
+    def normalize(image):
+        """Нормализация гистограммы"""
+        img_array = np.array(image)
+        img_norm = cv2.normalize(img_array, None, 0, 255, cv2.NORM_MINMAX)
+        return Image.fromarray(img_norm)
 
-        # Преобразование обратно в диапазон [0, 255]
-        img_log = (img_log * 255).astype(np.uint8)
+    @staticmethod
+    def equalize(image):
+        """Эквализация гистограммы"""
+        img_array = np.array(image)
+        img_eq = cv2.equalizeHist(img_array)
+        return Image.fromarray(img_eq)
 
-        return Image.fromarray(img_log)
+    @staticmethod
+    def gaussian_mapping(image, mean=128, std=50):
+        """Приведение к гауссовому распределению"""
+        img_array = np.array(image)
+
+        # Создаем целевое гауссово распределение
+        x = np.arange(256)
+        target_hist = np.exp(-((x - mean) ** 2) / (2 * std**2))
+        target_hist = target_hist / np.sum(target_hist)
+
+        # Вычисляем кумулятивную функцию распределения
+        cdf = np.cumsum(target_hist)
+
+        # Нормализуем CDF
+        cdf = cdf * 255
+
+        # Применяем преобразование
+        img_mapped = cdf[img_array]
+        return Image.fromarray(img_mapped.astype(np.uint8))
+
+    @staticmethod
+    def exponential_mapping(image, lambda_param=0.05):
+        """Приведение к экспоненциальному распределению"""
+        img_array = np.array(image)
+
+        # Создаем целевое экспоненциальное распределение
+        x = np.arange(256)
+        target_hist = lambda_param * np.exp(-lambda_param * x)
+        target_hist = target_hist / np.sum(target_hist)
+
+        # Вычисляем кумулятивную функцию распределения
+        cdf = np.cumsum(target_hist)
+
+        # Нормализуем CDF
+        cdf = cdf * 255
+
+        # Применяем преобразование
+        img_mapped = cdf[img_array]
+        return Image.fromarray(img_mapped.astype(np.uint8))
 
 
 class ImageViewer:
     def __init__(self, root):
         self.root = root
-        self.root.title("Анализатор черно-белых изображений")
+        self.root.title("Градационная коррекция чёрно-белых изображений")
 
         # Установим начальный путь к папке с изображениями
         self.folder_path = "photos/"
@@ -87,8 +126,8 @@ class ImageViewer:
         self.bottom_frame = Frame(root)
         self.bottom_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Левая панель (список изображений)
-        self.left_frame = Frame(self.main_frame, width=200, bg="lightgray")
+        # Левая панель (список изображений и настройки)
+        self.left_frame = Frame(self.main_frame, width=300, bg="lightgray")
         self.left_frame.pack(side=tk.LEFT, fill=tk.Y)
 
         # Правая панель (изображение и гистограмма)
@@ -98,7 +137,7 @@ class ImageViewer:
         # Верхняя часть правой панели (изображение)
         self.image_frame = Frame(self.right_frame, width=600, height=400, bg="black")
         self.image_frame.pack(fill=tk.BOTH, expand=True)
-        self.image_frame.pack_propagate(False)  # Запрещаем изменение размера фрейма
+        self.image_frame.pack_propagate(False)
 
         # Нижняя часть правой панели (гистограмма)
         self.hist_frame = Frame(self.right_frame, height=300)
@@ -141,29 +180,84 @@ class ImageViewer:
         self.correction_frame = Frame(self.left_frame, bg="lightgray")
         self.correction_frame.pack(fill=tk.X, pady=10)
 
-        self.correction_label = Label(
-            self.correction_frame, text="Методы коррекции:", bg="lightgray"
+        # Первый комбобокс: Базовые преобразования
+        self.basic_label = Label(
+            self.correction_frame, text="Базовые преобразования:", bg="lightgray"
         )
-        self.correction_label.pack(anchor="w")
+        self.basic_label.pack(anchor="w")
 
-        # Комбобокс для выбора метода коррекции
-        self.correction_method = ttk.Combobox(
+        self.basic_method = ttk.Combobox(
             self.correction_frame,
             values=[
                 "Без коррекции",
-                "Линейное растяжение",
-                "S-образная коррекция",
-                "Гамма-коррекция",
-                "Логарифмическая коррекция",
+                "Полярность",
+                "Логарифмическое",
+                "Степенное (гамма)",
+                "Кусочно-линейное",
             ],
             state="readonly",
         )
-        self.correction_method.set("Без коррекции")
-        self.correction_method.pack(fill=tk.X, pady=5)
-        self.correction_method.bind("<<ComboboxSelected>>", self.apply_correction)
+        self.basic_method.set("Без коррекции")
+        self.basic_method.pack(fill=tk.X, pady=5)
+        self.basic_method.bind("<<ComboboxSelected>>", self.update_correction_ui)
 
-        # Слайдер для гамма-коррекции
-        self.gamma_frame = Frame(self.correction_frame, bg="lightgray")
+        # Второй комбобокс: Коррекции гистограмм
+        self.hist_label = Label(
+            self.correction_frame, text="Коррекции гистограмм:", bg="lightgray"
+        )
+        self.hist_label.pack(anchor="w")
+
+        self.hist_method = ttk.Combobox(
+            self.correction_frame,
+            values=[
+                "Без коррекции",
+                "Нормализация",
+                "Эквализация",
+                "Приведение к заданной функции",
+            ],
+            state="readonly",
+        )
+        self.hist_method.set("Без коррекции")
+        self.hist_method.pack(fill=tk.X, pady=5)
+        self.hist_method.bind("<<ComboboxSelected>>", self.update_correction_ui)
+
+        # Третий комбобокс: Функции распределения
+        self.dist_label = Label(
+            self.correction_frame, text="Функция распределения:", bg="lightgray"
+        )
+        self.dist_label.pack(anchor="w")
+
+        self.dist_method = ttk.Combobox(
+            self.correction_frame,
+            values=["Гауссова", "Экспоненциальная"],
+            state="readonly",
+        )
+        self.dist_method.set("Гауссова")
+        self.dist_method.pack(fill=tk.X, pady=5)
+        self.dist_method.bind("<<ComboboxSelected>>", self.update_correction_ui)
+
+        # Фреймы для параметров
+        self.params_frame = Frame(self.correction_frame, bg="lightgray")
+        self.params_frame.pack(fill=tk.X, pady=5)
+
+        # Параметры для логарифмического преобразования
+        self.log_frame = Frame(self.params_frame, bg="lightgray")
+        self.log_label = Label(self.log_frame, text="Коэффициент C:", bg="lightgray")
+        self.log_label.pack(side=tk.LEFT)
+        self.log_value = Label(self.log_frame, text="45", bg="lightgray")
+        self.log_value.pack(side=tk.RIGHT)
+        self.log_scale = ttk.Scale(
+            self.log_frame,
+            from_=1,
+            to=100,
+            orient=tk.HORIZONTAL,
+            command=self.update_log,
+        )
+        self.log_scale.set(45)
+        self.log_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Параметры для гамма-коррекции
+        self.gamma_frame = Frame(self.params_frame, bg="lightgray")
         self.gamma_label = Label(self.gamma_frame, text="Гамма:", bg="lightgray")
         self.gamma_label.pack(side=tk.LEFT)
         self.gamma_value = Label(self.gamma_frame, text="1.0", bg="lightgray")
@@ -178,39 +272,113 @@ class ImageViewer:
         self.gamma_scale.set(1.0)
         self.gamma_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Слайдер для S-образной коррекции
-        self.s_curve_frame = Frame(self.correction_frame, bg="lightgray")
-        self.s_curve_label = Label(
-            self.s_curve_frame, text="Сила S-кривой:", bg="lightgray"
-        )
-        self.s_curve_label.pack(side=tk.LEFT)
-        self.s_curve_value = Label(self.s_curve_frame, text="0.5", bg="lightgray")
-        self.s_curve_value.pack(side=tk.RIGHT)
-        self.s_curve_scale = ttk.Scale(
-            self.s_curve_frame,
-            from_=0.1,
-            to=5.0,
-            orient=tk.HORIZONTAL,
-            command=self.update_s_curve,
-        )
-        self.s_curve_scale.set(0.5)
-        self.s_curve_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Параметры для кусочно-линейного преобразования
+        self.piecewise_frame = Frame(self.params_frame, bg="lightgray")
 
-        # Слайдер для логарифмической коррекции
-        self.log_frame = Frame(self.correction_frame, bg="lightgray")
-        self.log_label = Label(self.log_frame, text="Коэффициент C:", bg="lightgray")
-        self.log_label.pack(side=tk.LEFT)
-        self.log_value = Label(self.log_frame, text="1.0", bg="lightgray")
-        self.log_value.pack(side=tk.RIGHT)
-        self.log_scale = ttk.Scale(
-            self.log_frame,
-            from_=0.1,
-            to=5.0,
-            orient=tk.HORIZONTAL,
-            command=self.update_log,
+        # Порог
+        self.threshold_frame = Frame(self.piecewise_frame, bg="lightgray")
+        self.threshold_label = Label(
+            self.threshold_frame, text="Порог T:", bg="lightgray"
         )
-        self.log_scale.set(1.0)
-        self.log_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.threshold_label.pack(side=tk.LEFT)
+        self.threshold_value = Label(self.threshold_frame, text="128", bg="lightgray")
+        self.threshold_value.pack(side=tk.RIGHT)
+        self.threshold_scale = ttk.Scale(
+            self.threshold_frame,
+            from_=0,
+            to=255,
+            orient=tk.HORIZONTAL,
+            command=self.update_threshold,
+        )
+        self.threshold_scale.set(128)
+        self.threshold_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Наклон для темных пикселей
+        self.slope_low_frame = Frame(self.piecewise_frame, bg="lightgray")
+        self.slope_low_label = Label(
+            self.slope_low_frame, text="Наклон a:", bg="lightgray"
+        )
+        self.slope_low_label.pack(side=tk.LEFT)
+        self.slope_low_value = Label(self.slope_low_frame, text="0.5", bg="lightgray")
+        self.slope_low_value.pack(side=tk.RIGHT)
+        self.slope_low_scale = ttk.Scale(
+            self.slope_low_frame,
+            from_=0.1,
+            to=2.0,
+            orient=tk.HORIZONTAL,
+            command=self.update_slope_low,
+        )
+        self.slope_low_scale.set(0.5)
+        self.slope_low_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Наклон для светлых пикселей
+        self.slope_high_frame = Frame(self.piecewise_frame, bg="lightgray")
+        self.slope_high_label = Label(
+            self.slope_high_frame, text="Наклон b:", bg="lightgray"
+        )
+        self.slope_high_label.pack(side=tk.LEFT)
+        self.slope_high_value = Label(self.slope_high_frame, text="1.5", bg="lightgray")
+        self.slope_high_value.pack(side=tk.RIGHT)
+        self.slope_high_scale = ttk.Scale(
+            self.slope_high_frame,
+            from_=0.1,
+            to=2.0,
+            orient=tk.HORIZONTAL,
+            command=self.update_slope_high,
+        )
+        self.slope_high_scale.set(1.5)
+        self.slope_high_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Параметры для гауссова распределения
+        self.gaussian_frame = Frame(self.params_frame, bg="lightgray")
+
+        # Среднее значение
+        self.mean_frame = Frame(self.gaussian_frame, bg="lightgray")
+        self.mean_label = Label(self.mean_frame, text="μ:", bg="lightgray")
+        self.mean_label.pack(side=tk.LEFT)
+        self.mean_value = Label(self.mean_frame, text="128", bg="lightgray")
+        self.mean_value.pack(side=tk.RIGHT)
+        self.mean_scale = ttk.Scale(
+            self.mean_frame,
+            from_=0,
+            to=255,
+            orient=tk.HORIZONTAL,
+            command=self.update_mean,
+        )
+        self.mean_scale.set(128)
+        self.mean_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Стандартное отклонение
+        self.std_frame = Frame(self.gaussian_frame, bg="lightgray")
+        self.std_label = Label(self.std_frame, text="σ:", bg="lightgray")
+        self.std_label.pack(side=tk.LEFT)
+        self.std_value = Label(self.std_frame, text="50", bg="lightgray")
+        self.std_value.pack(side=tk.RIGHT)
+        self.std_scale = ttk.Scale(
+            self.std_frame,
+            from_=1,
+            to=100,
+            orient=tk.HORIZONTAL,
+            command=self.update_std,
+        )
+        self.std_scale.set(50)
+        self.std_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Параметры для экспоненциального распределения
+        self.exp_frame = Frame(self.params_frame, bg="lightgray")
+        self.lambda_label = Label(self.exp_frame, text="λ:", bg="lightgray")
+        self.lambda_label.pack(side=tk.LEFT)
+        self.lambda_value = Label(self.exp_frame, text="0.05", bg="lightgray")
+        self.lambda_value.pack(side=tk.RIGHT)
+        self.lambda_scale = ttk.Scale(
+            self.exp_frame,
+            from_=0.01,
+            to=0.2,
+            orient=tk.HORIZONTAL,
+            command=self.update_lambda,
+        )
+        self.lambda_scale.set(0.05)
+        self.lambda_scale.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Текстовое поле для анализа изображения
         self.analysis_label = Label(
@@ -224,62 +392,149 @@ class ImageViewer:
         # Загружаем изображения
         self.load_images()
 
+    def update_correction_ui(self, event=None):
+        """Обновление интерфейса в зависимости от выбранных методов"""
+        # Скрываем все фреймы параметров
+        self.log_frame.pack_forget()
+        self.gamma_frame.pack_forget()
+        self.piecewise_frame.pack_forget()
+        self.threshold_frame.pack_forget()
+        self.slope_low_frame.pack_forget()
+        self.slope_high_frame.pack_forget()
+        self.gaussian_frame.pack_forget()
+        self.mean_frame.pack_forget()
+        self.std_frame.pack_forget()
+        self.exp_frame.pack_forget()
+        self.dist_label.pack_forget()
+        self.dist_method.pack_forget()
+
+        # Показываем нужные элементы в зависимости от выбранных методов
+        basic_method = self.basic_method.get()
+        hist_method = self.hist_method.get()
+
+        if basic_method == "Логарифмическое":
+            self.log_frame.pack(fill=tk.X, pady=5)
+        elif basic_method == "Степенное (гамма)":
+            self.gamma_frame.pack(fill=tk.X, pady=5)
+        elif basic_method == "Кусочно-линейное":
+            self.piecewise_frame.pack(fill=tk.X, pady=5)
+            self.threshold_frame.pack(fill=tk.X, pady=5)
+            self.slope_low_frame.pack(fill=tk.X, pady=5)
+            self.slope_high_frame.pack(fill=tk.X, pady=5)
+
+        if hist_method == "Приведение к заданной функции":
+            self.dist_label.pack(anchor="w")
+            self.dist_method.pack(fill=tk.X, pady=5)
+
+            if self.dist_method.get() == "Гауссова":
+                self.gaussian_frame.pack(fill=tk.X, pady=5)
+                self.mean_frame.pack(fill=tk.X, pady=5)
+                self.std_frame.pack(fill=tk.X, pady=5)
+            else:  # Экспоненциальная
+                self.exp_frame.pack(fill=tk.X, pady=5)
+
+        self.apply_correction()
+
+    def update_log(self, value):
+        """Обновление значения логарифмического преобразования"""
+        self.log_value.config(text=f"{float(value):.0f}")
+        if self.basic_method.get() == "Логарифмическое":
+            self.apply_correction()
+
     def update_gamma(self, value):
         """Обновление значения гамма-коррекции"""
         self.gamma_value.config(text=f"{float(value):.1f}")
-        if self.correction_method.get() == "Гамма-коррекция":
-            self.apply_correction(None)
+        if self.basic_method.get() == "Степенное (гамма)":
+            self.apply_correction()
 
-    def update_s_curve(self, value):
-        """Обновление значения S-образной коррекции"""
-        self.s_curve_value.config(text=f"{float(value):.1f}")
-        if self.correction_method.get() == "S-образная коррекция":
-            self.apply_correction(None)
+    def update_threshold(self, value):
+        """Обновление значения порога для кусочно-линейного преобразования"""
+        self.threshold_value.config(text=f"{float(value):.0f}")
+        if self.basic_method.get() == "Кусочно-линейное":
+            self.apply_correction()
 
-    def update_log(self, value):
-        """Обновление значения логарифмической коррекции"""
-        self.log_value.config(text=f"{float(value):.1f}")
-        if self.correction_method.get() == "Логарифмическая коррекция":
-            self.apply_correction(None)
+    def update_slope_low(self, value):
+        """Обновление значения наклона для темных пикселей"""
+        self.slope_low_value.config(text=f"{float(value):.1f}")
+        if self.basic_method.get() == "Кусочно-линейное":
+            self.apply_correction()
 
-    def apply_correction(self, event):
-        """Применение выбранного метода коррекции"""
+    def update_slope_high(self, value):
+        """Обновление значения наклона для светлых пикселей"""
+        self.slope_high_value.config(text=f"{float(value):.1f}")
+        if self.basic_method.get() == "Кусочно-линейное":
+            self.apply_correction()
+
+    def update_mean(self, value):
+        """Обновление значения среднего для гауссова распределения"""
+        self.mean_value.config(text=f"{float(value):.0f}")
+        if (
+            self.hist_method.get() == "Приведение к заданной функции"
+            and self.dist_method.get() == "Гауссова"
+        ):
+            self.apply_correction()
+
+    def update_std(self, value):
+        """Обновление значения стандартного отклонения для гауссова распределения"""
+        self.std_value.config(text=f"{float(value):.0f}")
+        if (
+            self.hist_method.get() == "Приведение к заданной функции"
+            and self.dist_method.get() == "Гауссова"
+        ):
+            self.apply_correction()
+
+    def update_lambda(self, value):
+        """Обновление значения λ для экспоненциального распределения"""
+        self.lambda_value.config(text=f"{float(value):.2f}")
+        if (
+            self.hist_method.get() == "Приведение к заданной функции"
+            and self.dist_method.get() == "Экспоненциальная"
+        ):
+            self.apply_correction()
+
+    def apply_correction(self, event=None):
+        """Применение выбранных методов коррекции"""
         if not self.original_image:
             return
 
-        # Скрываем все слайдеры
-        self.gamma_frame.pack_forget()
-        self.s_curve_frame.pack_forget()
-        self.log_frame.pack_forget()
+        # Начинаем с оригинального изображения
+        img = self.original_image
 
-        method = self.correction_method.get()
-
-        if method == "Без коррекции":
-            self.current_image = self.original_image
-        elif method == "Линейное растяжение":
-            self.current_image = ImageCorrector.linear_stretch(self.original_image)
-        elif method == "S-образная коррекция":
-            self.s_curve_frame.pack(fill=tk.X, pady=5)
-            strength = float(self.s_curve_scale.get())
-            self.current_image = ImageCorrector.s_curve_correction(
-                self.original_image, strength
-            )
-        elif method == "Гамма-коррекция":
-            self.gamma_frame.pack(fill=tk.X, pady=5)
-            gamma = float(self.gamma_scale.get())
-            self.current_image = ImageCorrector.gamma_correction(
-                self.original_image, gamma
-            )
-        elif method == "Логарифмическая коррекция":
-            self.log_frame.pack(fill=tk.X, pady=5)
+        # Применяем базовое преобразование
+        basic_method = self.basic_method.get()
+        if basic_method == "Полярность":
+            img = ImageCorrector.polarity(img)
+        elif basic_method == "Логарифмическое":
             c = float(self.log_scale.get())
-            self.current_image = ImageCorrector.logarithmic_correction(
-                self.original_image, c
-            )
+            img = ImageCorrector.logarithmic(img, c)
+        elif basic_method == "Степенное (гамма)":
+            gamma = float(self.gamma_scale.get())
+            img = ImageCorrector.gamma(img, gamma)
+        elif basic_method == "Кусочно-линейное":
+            threshold = float(self.threshold_scale.get())
+            slope_low = float(self.slope_low_scale.get())
+            slope_high = float(self.slope_high_scale.get())
+            img = ImageCorrector.piecewise_linear(img, threshold, slope_low, slope_high)
 
-        self.display_image(self.current_image)
-        self.plot_histogram(self.current_image)
-        self.analyze_image(self.current_image)
+        # Применяем коррекцию гистограммы
+        hist_method = self.hist_method.get()
+        if hist_method == "Нормализация":
+            img = ImageCorrector.normalize(img)
+        elif hist_method == "Эквализация":
+            img = ImageCorrector.equalize(img)
+        elif hist_method == "Приведение к заданной функции":
+            if self.dist_method.get() == "Гауссова":
+                mean = float(self.mean_scale.get())
+                std = float(self.std_scale.get())
+                img = ImageCorrector.gaussian_mapping(img, mean, std)
+            else:  # Экспоненциальная
+                lambda_param = float(self.lambda_scale.get())
+                img = ImageCorrector.exponential_mapping(img, lambda_param)
+
+        self.current_image = img
+        self.display_image(img)
+        self.plot_histogram(img)
+        self.analyze_image(img)
 
     def show_image_and_histogram(self, event):
         """Отображаем выбранное изображение и его гистограмму"""
@@ -357,9 +612,38 @@ class ImageViewer:
         img_array = np.array(img)
         self.ax.clear()
 
-        self.ax.hist(
-            img_array.ravel(), bins=256, range=(0, 256), color="black", alpha=0.7
+        # Определяем, нужно ли показывать две гистограммы
+        show_original = self.basic_method.get() == "Кусочно-линейное" or (
+            self.hist_method.get() == "Приведение к заданной функции"
+            and self.dist_method.get() == "Гауссова"
         )
+
+        if show_original and self.original_image is not None:
+            # Строим две гистограммы
+            original_array = np.array(self.original_image)
+            self.ax.hist(
+                original_array.ravel(),
+                bins=256,
+                range=(0, 256),
+                color="gray",
+                alpha=0.5,
+                label="До коррекции",
+            )
+            self.ax.hist(
+                img_array.ravel(),
+                bins=256,
+                range=(0, 256),
+                color="black",
+                alpha=0.7,
+                label="После коррекции",
+            )
+            self.ax.legend()
+        else:
+            # Строим одну гистограмму
+            self.ax.hist(
+                img_array.ravel(), bins=256, range=(0, 256), color="black", alpha=0.7
+            )
+
         self.ax.set_title("Гистограмма")
         self.ax.set_xlabel("Уровень яркости")
         self.ax.set_ylabel("Количество пикселей", labelpad=15)
