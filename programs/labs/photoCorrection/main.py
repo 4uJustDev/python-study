@@ -25,11 +25,17 @@ class FunctionVisualizer(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Визуализация функции преобразования")
-        self.geometry("600x400")
+        self.geometry("1000x600")  # Увеличили размер окна
 
         # Создаем фигуру matplotlib
-        self.fig = Figure(figsize=(6, 4), dpi=100)
+        self.fig = Figure(figsize=(10, 6), dpi=100)  # Увеличили размер фигуры
         self.ax = self.fig.add_subplot(111)
+
+        # Настройка стиля графика
+        plt.style.use("bmh")  # Используем встроенный стиль matplotlib
+        self.ax.grid(True, linestyle="--", alpha=0.7)
+        self.ax.set_facecolor("#f8f9fa")  # Светлый фон для графика
+        self.fig.patch.set_facecolor("#ffffff")  # Белый фон для фигуры
 
         # Создаем холст для отображения графика
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
@@ -47,17 +53,26 @@ class FunctionVisualizer(tk.Toplevel):
         self.ax.clear()
         x = np.linspace(0, 255, 256)
 
+        # Настройка стиля для всех графиков
+        self.ax.grid(True, linestyle="--", alpha=0.7)
+        self.ax.set_facecolor("#f8f9fa")
+
+        # Настройка шрифтов
+        title_font = {"fontsize": 16, "fontweight": "bold", "color": "#2c3e50"}
+        label_font = {"fontsize": 12, "color": "#2c3e50"}
+        legend_font = {"size": 11}
+
         if method == "logarithmic":
             c = params.get("c", 45)
             y = c * np.log(1 + x)
-            self.ax.plot(x, y, "b-", label=f"c = {c}")
-            self.ax.set_title("Логарифмическое преобразование")
+            self.ax.plot(x, y, color="#2980b9", linewidth=2, label=f"c = {c}")
+            self.ax.set_title("Логарифмическое преобразование", **title_font)
 
         elif method == "power":
             gamma = params.get("gamma", 1.0)
             y = 255 * (x / 255) ** gamma
-            self.ax.plot(x, y, "b-", label=f"γ = {gamma:.1f}")
-            self.ax.set_title("Степенное преобразование")
+            self.ax.plot(x, y, color="#27ae60", linewidth=2, label=f"γ = {gamma:.1f}")
+            self.ax.set_title("Степенное преобразование", **title_font)
 
         elif method == "piecewise":
             threshold = params.get("threshold", 128)
@@ -76,37 +91,95 @@ class FunctionVisualizer(tk.Toplevel):
             self.ax.plot(
                 x,
                 y,
-                "b-",
+                color="#c0392b",
+                linewidth=2,
                 label=f"Порог = {threshold}, k₁ = {slope_low:.1f}, k₂ = {slope_high:.1f}",
             )
-            self.ax.set_title("Кусочно-линейное преобразование")
+            self.ax.set_title("Кусочно-линейное преобразование", **title_font)
 
         elif method == "gaussian":
             mean = params.get("mean", 128)
             std = params.get("std", 50)
             y = 255 * np.exp(-((x - mean) ** 2) / (2 * std**2))
-            self.ax.plot(x, y, "b-", label=f"μ = {mean}, σ = {std}")
-            self.ax.set_title("Гауссово распределение")
+            self.ax.plot(
+                x, y, color="#8e44ad", linewidth=2, label=f"μ = {mean}, σ = {std}"
+            )
+            self.ax.set_title("Гауссово распределение", **title_font)
 
         elif method == "exponential":
             lambda_param = params.get("lambda_param", 0.05)
             y = 255 * (1 - np.exp(-lambda_param * x))
-            self.ax.plot(x, y, "b-", label=f"λ = {lambda_param:.2f}")
-            self.ax.set_title("Экспоненциальное распределение")
+            self.ax.plot(
+                x, y, color="#d35400", linewidth=2, label=f"λ = {lambda_param:.2f}"
+            )
+            self.ax.set_title("Экспоненциальное распределение", **title_font)
 
         else:
             # Линейное преобразование (y = x)
-            self.ax.plot(x, x, "b-", label="y = x")
-            self.ax.set_title("Линейное преобразование")
+            self.ax.plot(x, x, color="#2c3e50", linewidth=2, label="y = x")
+            self.ax.set_title("Линейное преобразование", **title_font)
 
         # Настройка осей и сетки
         self.ax.grid(True, linestyle="--", alpha=0.7)
-        self.ax.set_xlabel("Входное значение")
-        self.ax.set_ylabel("Выходное значение")
-        self.ax.legend()
+        self.ax.set_xlabel("Входное значение", **label_font)
+        self.ax.set_ylabel("Выходное значение", **label_font)
+
+        # Настройка легенды
+        self.ax.legend(
+            prop={"size": 11}, framealpha=0.9, facecolor="white", edgecolor="#bdc3c7"
+        )
+
+        # Добавляем формулу в правом верхнем углу
+        if method != "none":
+            formula = self.get_formula(method, params)
+            self.ax.text(
+                0.98,
+                0.02,
+                formula,
+                transform=self.ax.transAxes,
+                bbox=dict(
+                    facecolor="white",
+                    alpha=0.8,
+                    edgecolor="#bdc3c7",
+                    boxstyle="round,pad=0.5",
+                ),
+                ha="right",
+                va="bottom",
+                fontsize=12,
+                color="#2c3e50",
+            )
+
+        # Настройка пределов осей
+        self.ax.set_xlim(0, 255)
+        self.ax.set_ylim(0, 255)
 
         # Обновление холста
         self.canvas.draw()
+
+    def get_formula(self, method, params):
+        """Возвращает формулу для отображения на графике"""
+        if method == "logarithmic":
+            c = params.get("c", 45)
+            return f"y = {c}·ln(1 + x)"
+        elif method == "power":
+            gamma = params.get("gamma", 1.0)
+            return f"y = 255·(x/255)^{gamma:.1f}"
+        elif method == "piecewise":
+            threshold = params.get("threshold", 128)
+            slope_low = params.get("slope_low", 0.5)
+            slope_high = params.get("slope_high", 1.5)
+            return (
+                f"Iout = {slope_low}·Iin, Iin < {threshold}"
+                f"\nIout = {slope_high}·(Iin - {threshold}) + {slope_low}·{threshold}, Iin ≥ {threshold}"
+            )
+        elif method == "gaussian":
+            mean = params.get("mean", 128)
+            std = params.get("std", 50)
+            return f"y = 255·exp(-(x-{mean})²/(2·{std}²))"
+        elif method == "exponential":
+            lambda_param = params.get("lambda_param", 0.05)
+            return f"y = 255·(1 - exp(-{lambda_param:.2f}·x))"
+        return "y = x"
 
 
 class ImageCorrector:
@@ -282,16 +355,10 @@ class ImageViewer:
 
         # Фрейм для формул
         self.formula_frame = LabelFrame(
-            self.left_frame, text="Формула преобразования", bg="#f8f8f8"
+            self.left_frame, text="Формула преобразования", bg="#f8f8f8", height=120
         )
         self.formula_frame.pack(fill=tk.X, pady=5, padx=5)
-
-        self.formula_text = Text(
-            self.formula_frame, height=4, wrap=tk.WORD, bg="#f8f8f8", font=("Arial", 10)
-        )
-        self.formula_text.pack(fill=tk.X, padx=5, pady=5)
-        self.formula_text.insert(END, "Выберите метод преобразования")
-        self.formula_text.config(state=tk.DISABLED)
+        self.formula_frame.pack_propagate(False)
 
         # Фрейм для базовых преобразований
         self.basic_frame = LabelFrame(
@@ -523,34 +590,78 @@ class ImageViewer:
             self.btn_show_visualizer.config(text="Показать визуализацию функции")
 
     def update_formula(self):
-        """Обновление отображаемой формулы"""
-        self.formula_text.config(state=tk.NORMAL)
-        self.formula_text.delete(1.0, END)
+        """Обновление отображаемой формулы с использованием LaTeX"""
+        # Создаем фигуру для отображения формулы
+        fig = Figure(figsize=(8, 3), dpi=100)  # Увеличили размер фигуры
+        ax = fig.add_subplot(111)
+        ax.axis("off")
 
         basic_method = self.basic_method.get()
         hist_method = self.hist_method.get()
         dist_method = self.dist_method.get()
 
         if basic_method == "Полярность":
-            formula = "I_out = 255 - I_in"
+            formula = "I_{out} = 255 - I_{in}"
         elif basic_method == "Логарифмическое":
-            formula = "I_out = c * log(1 + I_in)"
+            c = float(self.log_scale.get())
+            formula = f"I_{{out}} = {c} \\cdot \\ln(1 + I_{{in}})"
         elif basic_method == "Степенное (гамма)":
-            formula = "I_out = 255 * (I_in/255)^γ"
+            gamma = float(self.gamma_scale.get())
+            formula = f"I_{{out}} = 255 \\cdot (\\frac{{I_{{in}}}}{{255}})^{{{gamma}}}"
         elif basic_method == "Кусочно-линейное":
+            threshold = float(self.threshold_scale.get())
+            slope_low = float(self.slope_low_scale.get())
+            slope_high = float(self.slope_high_scale.get())
             formula = (
-                "I_out = a*I_in (при I_in < T)\nI_out = b*(I_in-T)+a*T (при I_in >= T)"
+                f"Iout = {slope_low}·Iin, Iin < {threshold}"
+                f"\nIout = {slope_high}·(Iin - {threshold}) + {slope_low}·{threshold}, Iin ≥ {threshold}"
             )
         elif hist_method == "Приведение к заданной функции":
             if dist_method == "Гауссова":
-                formula = "PDF = exp(-(x-μ)²/(2σ²))"
+                mean = float(self.mean_scale.get())
+                std = float(self.std_scale.get())
+                formula = f"PDF(x) = \\frac{{1}}{{\\sigma\\sqrt{{2\\pi}}}} \\cdot e^{{-\\frac{{(x-\\mu)^2}}{{2\\sigma^2}}}} \\\\ \\mu = {mean}, \\sigma = {std}"
             else:  # Экспоненциальная
-                formula = "PDF = λ * exp(-λx)"
+                lambda_param = float(self.lambda_scale.get())
+                formula = f"PDF(x) = \\lambda \\cdot e^{{-\\lambda x}} \\\\ \\lambda = {lambda_param}"
         else:
             formula = "Выберите метод преобразования"
 
-        self.formula_text.insert(END, formula)
-        self.formula_text.config(state=tk.DISABLED)
+        ax.text(
+            0.5,
+            0.5,
+            f"${formula}$",
+            horizontalalignment="center",
+            verticalalignment="center",
+            transform=ax.transAxes,
+            fontsize=16,  # Увеличили размер шрифта
+        )
+
+        # Конвертируем фигуру в изображение
+        canvas = FigureCanvasTkAgg(fig, master=self.formula_frame)
+        canvas.draw()
+
+        # Получаем изображение из холста
+        formula_image = Image.frombytes(
+            "RGBA", canvas.get_width_height(), canvas.buffer_rgba()
+        )
+
+        # Изменяем размер изображения
+        formula_image = formula_image.resize(
+            (self.formula_frame.winfo_width(), 150), Image.LANCZOS  # Увеличили высоту
+        )
+
+        # Конвертируем в формат для Tkinter
+        photo = ImageTk.PhotoImage(formula_image)
+
+        # Очищаем предыдущее содержимое
+        for widget in self.formula_frame.winfo_children():
+            widget.destroy()
+
+        # Создаем новый label для отображения формулы
+        formula_label = Label(self.formula_frame, image=photo, bg="#f8f8f8")
+        formula_label.image = photo  # Сохраняем ссылку
+        formula_label.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
     def update_correction_ui(self, event=None):
         """Обновление интерфейса в зависимости от выбранных методов"""
