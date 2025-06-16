@@ -7,6 +7,9 @@ from io import BytesIO
 # Функция для кодирования изображения в base64
 def image_to_base64(image_path):
     img = Image.open(image_path)
+    # Convert RGBA to RGB if necessary
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
     buffered = BytesIO()
     img.save(buffered, format="JPEG")
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
@@ -41,12 +44,16 @@ qa_pairs = [
 
 # Путь к изображению
 image_path = "images/YA-1.jpeg"
+image_path = "images/KA-1.png"
+
 image_base64 = image_to_base64(image_path)
 
 # Проверка каждого вопроса
 for qa in qa_pairs:
     response = ollama.generate(
-        model="llava",
+        # model="llava",
+        model="bakllava",
+        # model="moondream",
         prompt=f"Ответь только 'Да' или 'Нет'. {qa['question']}",
         images=[image_base64],
     )
