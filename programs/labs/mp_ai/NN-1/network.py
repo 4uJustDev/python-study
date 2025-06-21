@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class NeuralNetwork:
     def __init__(self):
         """Инициализация нейросети"""
@@ -7,11 +10,11 @@ class NeuralNetwork:
         self.batch_data = []
         self.amount_neurons = 1  # Количество нейронов по умолчанию
 
-        self.weights = []
+        self.weights = 0.10 * np.random.randn(9, self.amount_neurons)
         self.final_weights = []
 
-        self.biases = []  # Зависит от количество нейронов
-        self.final_biases = []
+        self.biases = np.zeros((1, self.amount_neurons))
+        self.final_biases = None
 
     """ОБРАБОТКА"""
 
@@ -71,7 +74,15 @@ class NeuralNetwork:
         self.batch_data = []  # Очищаем предыдущий батч
         self.amount_neurons = neurons_count  # Сохраняем количество нейронов
 
-    def finish_batch_processing(self):
+        # Обновляем веса и смещения для нового количества нейронов
+        self._update_network_parameters()
+
+    def _update_network_parameters(self):
+        """Обновляет веса и смещения в соответствии с текущим количеством нейронов"""
+        self.weights = 0.10 * np.random.randn(9, self.amount_neurons)
+        self.biases = np.zeros((1, self.amount_neurons))
+
+    def finish_batch_processing(self, error_threshold=0.01):
         """Завершает обработку батча и выводит общую статистику"""
         if not self.batch_data:
             print("Нет данных для обработки")
@@ -83,14 +94,34 @@ class NeuralNetwork:
 
         print(f"Всего обработано изображений: {len(self.batch_data)}")
         print(f"Количество нейронов: {self.amount_neurons}")
+        print(f"Порог ошибки: {error_threshold}")
         print(f"Дата: {self.batch_data}")
+
+        self.train(error_threshold)
 
         # Возвращаем данные для дальнейшей работы
         return self.batch_data
 
     def get_batch_data(self):
-        """Возвращает данные текущего батча"""
-        return self.batch_data
+        """Возвращает данные текущего батча в виде векторов признаков и меток классов
+
+        Returns:
+            tuple: (X, y) где:
+                X - список векторов признаков (пиксельные векторы)
+                y - список меток классов (1 для корректных, 0 для некорректных)
+        """
+        X = []
+
+        y = []
+
+        for item in self.batch_data:
+            # Добавляем вектор признаков
+            X.append(item["vector"])
+
+            # Добавляем метку класса (1 для корректных, 0 для некорректных)
+            y.append(1 if item["is_correct"] else 0)
+
+        return X, y
 
     def get_all_processed_data(self):
         """Возвращает данные всех обработанных изображений"""
@@ -115,9 +146,24 @@ class NeuralNetwork:
                     f.write(f"  {row[0]} {row[1]} {row[2]}\n")
                 f.write("-" * 30 + "\n")
 
-        print(f"Данные экспортированы в файл: {filename}")
-
     """ВЫЧИСЛЕНИЯ"""
+
+    def activare_RELU(self, inputs):
+        return np.maximum(0, inputs)
+
+    def forward(self, inputs):
+        print(inputs)
+        print(self.weights)
+        print(self.biases)
+        return np.dot(inputs, self.weights) + self.biases
+
+    def train(self, error_threshold=0.01):
+        X, y = self.get_batch_data()
+        print(f"\nВывод X {X}")
+        print(f"\nВывод y {y}")
+        print(f"\n Веса {self.weights}")
+        print(f"\n Смещение {self.biases}")
+        print(f"\n Порог ошибки {error_threshold}")
 
 
 # Тестовый код для проверки

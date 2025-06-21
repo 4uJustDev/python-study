@@ -97,6 +97,16 @@ class BW_BMP_Viewer:
         )
         self.neurons_entry.pack(side=tk.RIGHT)
 
+        # Поле для порога ошибки
+        error_threshold_frame = tk.Frame(left_panel)
+        error_threshold_frame.pack(fill=tk.X, padx=2, pady=2)
+        tk.Label(error_threshold_frame, text="Порог ошибки:").pack(side=tk.LEFT)
+        self.error_threshold_var = tk.StringVar(value="0.01")
+        self.error_threshold_entry = tk.Entry(
+            error_threshold_frame, textvariable=self.error_threshold_var, width=10
+        )
+        self.error_threshold_entry.pack(side=tk.RIGHT)
+
         # Холст для рисования
         self.canvas = tk.Canvas(paned_window, width=300, height=300, bg="white")
         paned_window.add(self.canvas)
@@ -167,8 +177,18 @@ class BW_BMP_Viewer:
             self.log("Ошибка: введите корректное число нейронов")
             return
 
+        # Получаем порог ошибки
+        try:
+            error_threshold = float(self.error_threshold_var.get())
+            if error_threshold <= 0:
+                self.log("Ошибка: порог ошибки должен быть положительным числом")
+                return
+        except ValueError:
+            self.log("Ошибка: введите корректное значение порога ошибки")
+            return
+
         self.log(
-            f"Анализ {len(self.selected_files)} выбранных файлов с {neurons_count} нейронами..."
+            f"Анализ {len(self.selected_files)} выбранных файлов с {neurons_count} нейронами и порогом ошибки {error_threshold}..."
         )
 
         # Начинаем batch processing
@@ -222,7 +242,7 @@ class BW_BMP_Viewer:
                 self.log(f"Ошибка анализа {os.path.basename(filepath)}: {str(e)}")
 
         # Завершаем batch processing и получаем данные
-        batch_data = self.network.finish_batch_processing()
+        batch_data = self.network.finish_batch_processing(error_threshold)
 
         if batch_data:
             self.log(
