@@ -97,15 +97,25 @@ class BW_BMP_Viewer:
         )
         self.neurons_entry.pack(side=tk.RIGHT)
 
-        # Поле для порога ошибки
+        # Скорость обучения
         error_threshold_frame = tk.Frame(left_panel)
         error_threshold_frame.pack(fill=tk.X, padx=2, pady=2)
         tk.Label(error_threshold_frame, text="Порог ошибки:").pack(side=tk.LEFT)
-        self.error_threshold_var = tk.StringVar(value="0.01")
+        self.error_threshold_var = tk.StringVar(value="0.1")
         self.error_threshold_entry = tk.Entry(
             error_threshold_frame, textvariable=self.error_threshold_var, width=10
         )
         self.error_threshold_entry.pack(side=tk.RIGHT)
+
+        # Поле для порога ошибки
+        learning_rate_frame = tk.Frame(left_panel)
+        learning_rate_frame.pack(fill=tk.X, padx=2, pady=2)
+        tk.Label(learning_rate_frame, text="Скорость обучения:").pack(side=tk.LEFT)
+        self.learning_rate_var = tk.StringVar(value="0.1")
+        self.learning_rate_entry = tk.Entry(
+            learning_rate_frame, textvariable=self.learning_rate_var, width=10
+        )
+        self.learning_rate_entry.pack(side=tk.RIGHT)
 
         # Холст для рисования
         self.canvas = tk.Canvas(paned_window, width=300, height=300, bg="white")
@@ -150,7 +160,9 @@ class BW_BMP_Viewer:
         vector = []
         for row in self.pixels:
             for pixel in row:
-                vector.append(0 if pixel == 0 else 1)  # 0 для чёрного, 1 для белого
+                vector.append(
+                    1 if pixel == 0 else 0
+                )  # 1 для чёрного (правильного), 0 для белого (неправильного)
 
         # Проверяем, можно ли редактировать изображение
         is_editable = self.check_if_editable()
@@ -158,8 +170,12 @@ class BW_BMP_Viewer:
         # Передаём данные в нейросеть
         self.network.process_image(is_editable, vector, "Текущее изображение")
 
+        # Вызов предсказания
+        prediction = self.network.predict(vector)
         self.log(f"Вектор изображения: {vector}")
-        self.log(f"Редактируемое: {'Да' if is_editable else 'Нет'}")
+        self.log(
+            f"Результат предсказания: {'Правильное' if prediction == 1 else 'Неправильное'}"
+        )
 
     def analyze_selected_files(self):
         """Анализирует все выбранные файлы"""
@@ -185,6 +201,16 @@ class BW_BMP_Viewer:
                 return
         except ValueError:
             self.log("Ошибка: введите корректное значение порога ошибки")
+            return
+
+        # Получаем Скорость
+        try:
+            learning_rate = float(self.learning_rate_var.get())
+            if learning_rate <= 0:
+                self.log("Ошибка: Скорость должен быть положительным числом")
+                return
+        except ValueError:
+            self.log("Ошибка: введите корректное значение скорости")
             return
 
         self.log(
@@ -218,11 +244,15 @@ class BW_BMP_Viewer:
                     for x in range(width):
                         pixel = img.getpixel((x, y))
                         if isinstance(pixel, int):
-                            vector.append(0 if pixel == 0 else 1)
+                            vector.append(
+                                1 if pixel == 0 else 0
+                            )  # 1 для чёрного, 0 для белого
                         elif len(pixel) in (1, 3):
-                            vector.append(0 if pixel[0] == 0 else 1)
+                            vector.append(
+                                1 if pixel[0] == 0 else 0
+                            )  # 1 для чёрного, 0 для белого
                         else:
-                            vector.append(1)  # По умолчанию белый
+                            vector.append(0)  # По умолчанию белый (0)
 
                 # Проверяем редактируемость
                 black_pixels = vector.count(0)
@@ -242,7 +272,9 @@ class BW_BMP_Viewer:
                 self.log(f"Ошибка анализа {os.path.basename(filepath)}: {str(e)}")
 
         # Завершаем batch processing и получаем данные
-        batch_data = self.network.finish_batch_processing(error_threshold)
+        batch_data = self.network.finish_batch_processing(
+            learning_rate, error_threshold
+        )
 
         if batch_data:
             self.log(
@@ -264,7 +296,7 @@ class BW_BMP_Viewer:
 
     def check_if_editable(self):
         """Проверяет, можно ли редактировать изображение (простая логика)"""
-        # Считаем количество чёрных пикселей
+        # Считаем количество чёрных пикселей (в self.pixels чёрный = 0)
         black_pixels = sum(1 for row in self.pixels for pixel in row if pixel == 0)
         # Если чёрных пикселей больше 4, считаем изображение нередактируемым
         return black_pixels <= 4
@@ -388,16 +420,8 @@ class BW_BMP_Viewer:
                 messagebox.showwarning("Предупреждение", "Изображение не чёрно-белое!")
 
             self.draw_pixels()
-            self.print_image_info(filepath)
         except Exception as e:
             self.log(f"Ошибка загрузки: {str(e)}")
-
-    def print_image_info(self, filepath):
-        self.log(f"Файл: {os.path.basename(filepath)}")
-        self.log("Пиксели (0 — чёрный, 255 — белый):")
-        for row in self.pixels:
-            self.log(" ".join(str(pixel).ljust(3) for pixel in row))
-        self.log("-" * 40)
 
     def log(self, message):
         self.console.config(state=tk.NORMAL)

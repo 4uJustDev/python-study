@@ -11,10 +11,7 @@ class NeuralNetwork:
         self.amount_neurons = 1  # Количество нейронов по умолчанию
 
         self.weights = 0.10 * np.random.randn(9, self.amount_neurons)
-        self.final_weights = []
-
         self.biases = np.zeros((1, self.amount_neurons))
-        self.final_biases = None
 
     """ОБРАБОТКА"""
 
@@ -34,21 +31,11 @@ class NeuralNetwork:
             filename (str): Имя файла изображения
             is_correct (bool): Правильное ли изображение
         """
-
-        print(f"Изображение: {filename}")
         print(f"Вектор значений: {vector_of_values}")
-        print(f"Правильное: {'Да' if is_correct else 'Нет'}")
-
-        # Выводим изображение в виде матрицы 3x3
-        print("Матрица изображения (0 - чёрный, 1 - белый):")
-        for i in range(0, 9, 3):
-            row = vector_of_values[i : i + 3]
-            print(f"  {row[0]} {row[1]} {row[2]}")
 
         # Статистика
         black_pixels = vector_of_values.count(0)
         white_pixels = vector_of_values.count(1)
-        print(f"Чёрных пикселей: {black_pixels}, Белых пикселей: {white_pixels}")
         print("-" * 40)
 
         # Сохраняем данные для дальнейшей обработки
@@ -82,7 +69,7 @@ class NeuralNetwork:
         self.weights = 0.10 * np.random.randn(9, self.amount_neurons)
         self.biases = np.zeros((1, self.amount_neurons))
 
-    def finish_batch_processing(self, error_threshold=0.01):
+    def finish_batch_processing(self, learning_rate=0.1, error_threshold=0.2):
         """Завершает обработку батча и выводит общую статистику"""
         if not self.batch_data:
             print("Нет данных для обработки")
@@ -92,12 +79,7 @@ class NeuralNetwork:
         print("ЗАВЕРШЕНИЕ ОБРАБОТКИ БАТЧА")
         print("=" * 60)
 
-        print(f"Всего обработано изображений: {len(self.batch_data)}")
-        print(f"Количество нейронов: {self.amount_neurons}")
-        print(f"Порог ошибки: {error_threshold}")
-        print(f"Дата: {self.batch_data}")
-
-        self.train(error_threshold)
+        self.train(learning_rate, error_threshold)
 
         # Возвращаем данные для дальнейшей работы
         return self.batch_data
@@ -152,18 +134,94 @@ class NeuralNetwork:
         return np.maximum(0, inputs)
 
     def forward(self, inputs):
-        print(inputs)
-        print(self.weights)
-        print(self.biases)
-        return np.dot(inputs, self.weights) + self.biases
+        z = np.dot(inputs, self.weights) + self.biases
 
-    def train(self, error_threshold=0.01):
+        return self.activare_RELU(z)
+
+    def train(self, learning_rate=0.1, error_threshold=0.2, max_epochs=100):
+        """Обучение сети"""
         X, y = self.get_batch_data()
-        print(f"\nВывод X {X}")
-        print(f"\nВывод y {y}")
-        print(f"\n Веса {self.weights}")
-        print(f"\n Смещение {self.biases}")
-        print(f"\n Порог ошибки {error_threshold}")
+
+        # Преобразуем в numpy массивы для корректной работы
+        X = np.array(X)
+        y = np.array(y).reshape(-1, 1)  # Преобразуем в столбец
+
+        epoch = 0
+        total_error = float("inf")
+
+        print("Начальные параметры:")
+        print(f"X,: {X}")
+        print(f"y,: {y}")
+        print(f"Веса: {self.weights}")
+        print(f"Смещение: {self.biases}")
+        print(f"Скорость обучения: {learning_rate}")
+        print(f"Порог ошибки: {error_threshold}")
+        print(f"Размер данных: X={X.shape}, y={y.shape}")
+        print("\nНачало обучения...\n")
+
+        while total_error > error_threshold and epoch < max_epochs:
+            total_error = 0
+            epoch += 1
+
+            for i in range(len(X)):
+                # Прямой проход
+                x_i = X[i].reshape(1, -1)  # Преобразуем в строку
+                output = self.forward(x_i)
+
+                # Вычисление ошибки
+                error = (y[i] - output) ** 2
+                total_error += error[0, 0]  # Извлекаем скалярное значение
+
+                # Производная функции потерь по выходу
+                d_loss_d_output = -2 * (y[i] - output)
+
+                # Производная ReLU
+                if output[0, 0] > 0:  # ReLU активна
+                    d_output_d_z = 1
+                else:  # ReLU неактивна
+                    d_output_d_z = 0
+
+                # Градиент по весам и смещениям
+                delta = d_loss_d_output * d_output_d_z
+
+                # Обновление весов (правильное матричное умножение)
+                weight_gradient = x_i.T * delta
+                self.weights -= learning_rate * weight_gradient
+
+                # Обновление смещений
+                self.biases -= learning_rate * delta
+
+            # Средняя ошибка на эпохе
+            total_error /= len(X)
+
+            if epoch % 10 == 0 or total_error <= error_threshold:
+                print(f"Эпоха {epoch}: Средняя ошибка = {total_error:.4f}")
+                print(f"Текущие веса: {self.weights.flatten()}")
+                print(f"Текущее смещение: {self.biases.flatten()}\n")
+
+                if total_error <= error_threshold:
+                    print(
+                        f"Обучение завершено на эпохе {epoch} с ошибкой {total_error:.4f}"
+                    )
+                    break
+
+        print("Конечные параметры:")
+        print(f"X,: {self.weights}")
+        print(f"y,: {self.biases}")
+        return self.weights, self.biases
+
+    def predict(self, input_vector):
+        """Предсказание для одного изображения"""
+        # Преобразуем входной вектор в правильный формат
+        if isinstance(input_vector, list):
+            input_vector = np.array(input_vector)
+
+        # Убеждаемся, что это 2D массив (строка)
+        if input_vector.ndim == 1:
+            input_vector = input_vector.reshape(1, -1)
+
+        output = self.forward(input_vector)
+        return 1 if output[0, 0] > 0.5 else 0
 
 
 # Тестовый код для проверки
