@@ -5,9 +5,22 @@ class NeuralNetwork:
         # Список для хранения данных всех обработанных изображений
         self.processed_images = []
         self.batch_data = []
+        self.amount_neurons = 1  # Количество нейронов по умолчанию
+
+        self.weights = []
+        self.final_weights = []
+
+        self.biases = []  # Зависит от количество нейронов
+        self.final_biases = []
+
+    """ОБРАБОТКА"""
 
     def process_image(
-        self, is_editable_picture, vector_of_values, filename="Неизвестно"
+        self,
+        is_editable_picture,
+        vector_of_values,
+        filename="Неизвестно",
+        is_correct=False,
     ):
         """
         Обрабатывает изображение
@@ -16,10 +29,12 @@ class NeuralNetwork:
             is_editable_picture (bool): Можно ли редактировать изображение
             vector_of_values (list): Вектор значений пикселей [0,1,0,0,0,1,...]
             filename (str): Имя файла изображения
+            is_correct (bool): Правильное ли изображение
         """
 
         print(f"Изображение: {filename}")
         print(f"Вектор значений: {vector_of_values}")
+        print(f"Правильное: {'Да' if is_correct else 'Нет'}")
 
         # Выводим изображение в виде матрицы 3x3
         print("Матрица изображения (0 - чёрный, 1 - белый):")
@@ -38,6 +53,7 @@ class NeuralNetwork:
             "filename": filename,
             "vector": vector_of_values,
             "is_editable": is_editable_picture,
+            "is_correct": is_correct,
             "black_pixels": black_pixels,
             "white_pixels": white_pixels,
             "matrix": [vector_of_values[i : i + 3] for i in range(0, 9, 3)],
@@ -46,12 +62,14 @@ class NeuralNetwork:
         self.processed_images.append(image_data)
         self.batch_data.append(image_data)
 
-    def start_batch_processing(self):
+    def start_batch_processing(self, neurons_count=1):
         """Начинает обработку батча изображений"""
         print("\n" + "=" * 60)
         print("НАЧАЛО ОБРАБОТКИ БАТЧА ИЗОБРАЖЕНИЙ")
         print("=" * 60)
+        print(f"Количество нейронов: {neurons_count}")
         self.batch_data = []  # Очищаем предыдущий батч
+        self.amount_neurons = neurons_count  # Сохраняем количество нейронов
 
     def finish_batch_processing(self):
         """Завершает обработку батча и выводит общую статистику"""
@@ -64,7 +82,8 @@ class NeuralNetwork:
         print("=" * 60)
 
         print(f"Всего обработано изображений: {len(self.batch_data)}")
-        print(f"Данные: {self.batch_data}")
+        print(f"Количество нейронов: {self.amount_neurons}")
+        print(f"Дата: {self.batch_data}")
 
         # Возвращаем данные для дальнейшей работы
         return self.batch_data
@@ -82,11 +101,14 @@ class NeuralNetwork:
         with open(filename, "w", encoding="utf-8") as f:
             f.write("ДАННЫЕ БАТЧА ИЗОБРАЖЕНИЙ\n")
             f.write("=" * 50 + "\n\n")
+            f.write(f"Количество нейронов: {getattr(self, 'amount_neurons', 1)}\n")
+            f.write(f"Всего изображений: {len(self.batch_data)}\n\n")
 
             for i, img in enumerate(self.batch_data, 1):
                 f.write(f"Изображение {i}: {img['filename']}\n")
                 f.write(f"Вектор: {img['vector']}\n")
                 f.write(f"Редактируемое: {'Да' if img['is_editable'] else 'Нет'}\n")
+                f.write(f"Правильное: {'Да' if img['is_correct'] else 'Нет'}\n")
                 f.write(f"Чёрных пикселей: {img['black_pixels']}\n")
                 f.write("Матрица:\n")
                 for row in img["matrix"]:
@@ -94,6 +116,8 @@ class NeuralNetwork:
                 f.write("-" * 30 + "\n")
 
         print(f"Данные экспортированы в файл: {filename}")
+
+    """ВЫЧИСЛЕНИЯ"""
 
 
 # Тестовый код для проверки

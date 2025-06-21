@@ -45,9 +45,9 @@ class BW_BMP_Viewer:
         tk.Button(left_panel, text="Анализ", command=self.analyze_image).pack(
             fill=tk.X, padx=2, pady=2
         )
-        tk.Button(left_panel, text="Обучить нейросеть", command=self.analyze_selected_files).pack(
-            fill=tk.X, padx=2, pady=2
-        )
+        tk.Button(
+            left_panel, text="Обучить нейросеть", command=self.analyze_selected_files
+        ).pack(fill=tk.X, padx=2, pady=2)
 
         # Кнопки управления выбором
         selection_frame = tk.Frame(left_panel)
@@ -61,12 +61,14 @@ class BW_BMP_Viewer:
 
         # Дерево файлов с чекбоксами
         self.tree = ttk.Treeview(
-            left_panel, columns=("selected",), show="tree headings"
+            left_panel, columns=("selected", "correct"), show="tree headings"
         )
         self.tree.heading("#0", text="Файлы")
         self.tree.heading("selected", text="✓")
+        self.tree.heading("correct", text="✅")
         self.tree.column("#0", width=150)
         self.tree.column("selected", width=30, anchor="center")
+        self.tree.column("correct", width=30, anchor="center")
         self.tree.pack(fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
 
@@ -75,6 +77,25 @@ class BW_BMP_Viewer:
             left_panel, text="Добавить/Исключить", command=self.toggle_selected_file
         )
         self.toggle_button.pack(fill=tk.X, padx=2, pady=2)
+
+        # Кнопка для разметки правильности (заблокирована по умолчанию)
+        self.correct_button = tk.Button(
+            left_panel,
+            text="Правильно/Неправильно",
+            command=self.toggle_correctness,
+            state=tk.DISABLED,
+        )
+        self.correct_button.pack(fill=tk.X, padx=2, pady=2)
+
+        # Поле для количества нейронов
+        neurons_frame = tk.Frame(left_panel)
+        neurons_frame.pack(fill=tk.X, padx=2, pady=2)
+        tk.Label(neurons_frame, text="Количество нейронов:").pack(side=tk.LEFT)
+        self.neurons_var = tk.StringVar(value="1")
+        self.neurons_entry = tk.Entry(
+            neurons_frame, textvariable=self.neurons_var, width=10
+        )
+        self.neurons_entry.pack(side=tk.RIGHT)
 
         # Холст для рисования
         self.canvas = tk.Canvas(paned_window, width=300, height=300, bg="white")
@@ -136,10 +157,22 @@ class BW_BMP_Viewer:
             self.log("Нет выбранных файлов для анализа")
             return
 
-        self.log(f"Анализ {len(self.selected_files)} выбранных файлов...")
+        # Получаем количество нейронов
+        try:
+            neurons_count = int(self.neurons_var.get())
+            if neurons_count <= 0:
+                self.log("Ошибка: количество нейронов должно быть положительным числом")
+                return
+        except ValueError:
+            self.log("Ошибка: введите корректное число нейронов")
+            return
+
+        self.log(
+            f"Анализ {len(self.selected_files)} выбранных файлов с {neurons_count} нейронами..."
+        )
 
         # Начинаем batch processing
-        self.network.start_batch_processing()
+        self.network.start_batch_processing(neurons_count)
 
         processed_count = 0
         for filepath in self.selected_files:
@@ -175,9 +208,12 @@ class BW_BMP_Viewer:
                 black_pixels = vector.count(0)
                 is_editable = black_pixels <= 4
 
-                # Передаём в нейросеть
+                # Получаем информацию о правильности
                 filename = os.path.basename(filepath)
-                self.network.process_image(is_editable, vector, filename)
+                is_correct = self.get_file_correctness(filename)
+
+                # Передаём в нейросеть
+                self.network.process_image(is_editable, vector, filename, is_correct)
                 processed_count += 1
 
             except PermissionError:
@@ -198,6 +234,13 @@ class BW_BMP_Viewer:
             self.network.export_batch_to_file("selected_images_data.txt")
         else:
             self.log("Не удалось обработать файлы")
+
+    def get_file_correctness(self, filename):
+        """Получает информацию о правильности файла из дерева"""
+        for item in self.tree.get_children():
+            if self.tree.item(item, "text") == filename:
+                return self.tree.item(item, "values")[1] == "✅"
+        return False
 
     def check_if_editable(self):
         """Проверяет, можно ли редактировать изображение (простая логика)"""
@@ -251,9 +294,13 @@ class BW_BMP_Viewer:
         # Добавляем файлы в дерево
         for i, filename in enumerate(bmp_files):
             is_selected = i < 10  # Первые 10 файлов выбраны по умолчанию
+            is_correct = i < 5  # Первые 5 файлов правильные по умолчанию
 
             item = self.tree.insert(
-                "", "end", text=filename, values=("✓" if is_selected else "",)
+                "",
+                "end",
+                text=filename,
+                values=("✓" if is_selected else "", "✅" if is_correct else ""),
             )
 
             if is_selected:
@@ -261,7 +308,7 @@ class BW_BMP_Viewer:
                 self.selected_files.append(full_path)
 
         self.log(
-            f"Загружено {len(bmp_files)} файлов, выбрано {len(self.selected_files)}"
+            f"Загружено {len(bmp_files)} файлов, выбрано {len(self.selected_files)}, правильных: 5"
         )
 
     def on_tree_select(self, event):
@@ -271,12 +318,22 @@ class BW_BMP_Viewer:
             filepath = os.path.join(self.images_folder, filename)
             self.load_image(filepath)
 
-            # Обновляем текст кнопки
+            # Обновляем текст кнопки выбора
             current_selected = self.tree.item(selection[0], "values")[0] == "✓"
             if current_selected:
                 self.toggle_button.config(text="Исключить из выборки")
+                # Активируем кнопку правильности только для выбранных файлов
+                self.correct_button.config(state=tk.NORMAL)
+                # Обновляем текст кнопки правильности
+                current_correct = self.tree.item(selection[0], "values")[1] == "✅"
+                if current_correct:
+                    self.correct_button.config(text="Пометить как неправильное")
+                else:
+                    self.correct_button.config(text="Пометить как правильное")
             else:
                 self.toggle_button.config(text="Добавить в выборку")
+                # Блокируем кнопку правильности для невыбранных файлов
+                self.correct_button.config(state=tk.DISABLED)
 
     def load_image(self, filepath):
         try:
@@ -344,6 +401,8 @@ class BW_BMP_Viewer:
         for item in self.tree.get_children():
             self.tree.set(item, "selected", "")
         self.log("Выбор снят для всех файлов")
+        # Блокируем кнопку правильности
+        self.correct_button.config(state=tk.DISABLED)
 
     def toggle_selected_file(self):
         """Переключает выбор файла"""
@@ -360,6 +419,8 @@ class BW_BMP_Viewer:
                 self.tree.set(selection[0], "selected", "")
                 self.log(f"✓ Файл '{filename}' убран из выбора")
                 self.toggle_button.config(text="Добавить в выборку")
+                # Блокируем кнопку правильности
+                self.correct_button.config(state=tk.DISABLED)
             else:
                 # Добавляем в выбранные
                 if filepath not in self.selected_files:
@@ -367,5 +428,31 @@ class BW_BMP_Viewer:
                 self.tree.set(selection[0], "selected", "✓")
                 self.log(f"✓ Файл '{filename}' добавлен в выбор")
                 self.toggle_button.config(text="Исключить из выборки")
+                # Активируем кнопку правильности
+                self.correct_button.config(state=tk.NORMAL)
+                # Обновляем текст кнопки правильности
+                current_correct = self.tree.item(selection[0], "values")[1] == "✅"
+                if current_correct:
+                    self.correct_button.config(text="Пометить как неправильное")
+                else:
+                    self.correct_button.config(text="Пометить как правильное")
 
             self.log(f"📊 Выбрано файлов: {len(self.selected_files)}")
+
+    def toggle_correctness(self):
+        """Переключает правильность выбранного файла"""
+        selection = self.tree.selection()
+        if selection:
+            filename = self.tree.item(selection[0], "text")
+            current_correct = self.tree.item(selection[0], "values")[1] == "✅"
+
+            if current_correct:
+                # Помечаем как неправильное
+                self.tree.set(selection[0], "correct", "")
+                self.correct_button.config(text="Пометить как правильное")
+                self.log(f"❌ Файл '{filename}' помечен как неправильное")
+            else:
+                # Помечаем как правильное
+                self.tree.set(selection[0], "correct", "✅")
+                self.correct_button.config(text="Пометить как неправильное")
+                self.log(f"✅ Файл '{filename}' помечен как правильное")
